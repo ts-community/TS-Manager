@@ -1,0 +1,32 @@
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+build/
+
+# Variables de entorno
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# Editor
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS
+.DS_Store
+Thumbs.db

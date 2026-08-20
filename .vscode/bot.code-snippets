@@ -1,0 +1,245 @@
+{
+  "Discord Prefix Command": {
+    "scope": "typescript",
+    "prefix": "prefixCommand",
+    "body": [
+      "import type { PrefixCommand } from '@/types/commands'",
+      "",
+      "export default {",
+      "  aliases: [$1],",
+      "",
+      "  async execute(message, args, client) {",
+      "    $0",
+      "  }",
+      "} satisfies PrefixCommand"
+    ],
+    "description": "Discord prefix command"
+  },
+  "Discord Prefix Command with Subcommands": {
+    "scope": "typescript",
+    "prefix": "prefixSubCommand",
+    "body": [
+      "import type { PrefixCommand } from '@/types/commands'",
+      "",
+      "export default {",
+      "  async execute(message, args, client) {",
+      "    const sub = args[0]?.toLowerCase()",
+      "",
+      "    if (sub === '$1') {",
+      "      $0",
+      "    }",
+      "  }",
+      "} satisfies PrefixCommand"
+    ],
+    "description": "Discord prefix command with subcommands"
+  },
+
+  "Discord Slash Command": {
+    "scope": "typescript",
+    "prefix": "slashCommand",
+    "body": [
+      "import { SlashCommandBuilder } from 'discord.js'",
+      "import type { SlashCommand } from '@/types/commands'",
+      "",
+      "export default {",
+      "  data: new SlashCommandBuilder()",
+      "    .setName('$1')",
+      "    .setDescription('$2'),",
+      "",
+      "  async execute(interaction) {",
+      "    $0",
+      "  }",
+      "} satisfies SlashCommand"
+    ],
+    "description": "Discord slash command"
+  },
+  "Discord Slash Command with Subcommands": {
+    "scope": "typescript",
+    "prefix": "slashSubCommand",
+    "body": [
+      "import { SlashCommandBuilder } from 'discord.js'",
+      "import type { SlashCommand } from '@/types/commands'",
+      "",
+      "export default {",
+      "  data: new SlashCommandBuilder()",
+      "    .setName('$1')",
+      "    .setDescription('$2')",
+      "    .addSubcommand(sub =>",
+      "      sub",
+      "        .setName('$3')",
+      "        .setDescription('$4')",
+      "    ),",
+      "",
+      "  async execute(interaction) {",
+      "    const sub = interaction.options.getSubcommand()",
+      "",
+      "    if (sub === '$3') {",
+      "      $0",
+      "    }",
+      "  }",
+      "} satisfies SlashCommand"
+    ],
+    "description": "Discord slash command with subcommands"
+  },
+
+
+  "Discord Context Menu Command": {
+    "scope": "typescript",
+    "prefix": "contextMenuCommand",
+    "body": [
+      "import { ContextMenuCommandBuilder, ApplicationCommandType } from 'discord.js'",
+      "import type { ContextMenuCommand } from '@/types/commands'",
+      "",
+      "export default {",
+      "  data: new ContextMenuCommandBuilder()",
+      "    .setName('$1')",
+      "    .setType(ApplicationCommandType.${2|User,Message|}),",
+      "",
+      "  async execute(interaction, client) {",
+      "    ${3|const user = await client.users.fetch(interaction.targetId);,const message = await interaction.channel?.messages.fetch(interaction.targetId);|}",
+      "",
+      "    $0",
+      "  }",
+      "} satisfies ContextMenuCommand"
+    ],
+    "description": "Discord context menu command"
+  },
+
+  "Discord Event": {
+    "scope": "typescript",
+    "prefix": "event",
+    "body": [
+      "import type { Event } from '@/types/events'",
+      "",
+      "export default {",
+      "",
+      "  async execute($1) {",
+      "    $0",
+      "  }",
+      "} satisfies Event<'$2'>"
+    ],
+    "description": "Discord event"
+  },
+
+  "Discord Button Handler": {
+    "scope": "typescript",
+    "prefix": "buttonHandler",
+    "body": [
+      "import type { ButtonHandler } from '@/types/interactions'",
+      "",
+      "export default {",
+      "  customId: '$1',",
+      "",
+      "  async execute(interaction, client) {",
+      "    $0",
+      "  }",
+      "} satisfies ButtonHandler"
+    ],
+    "description": "Discord button interaction handler"
+  },
+  "Discord Modal Handler": {
+    "scope": "typescript",
+    "prefix": "modalHandler",
+    "body": [
+      "import type { ModalHandler } from '@/types/interactions'",
+      "",
+      "export default {",
+      "  customId: '$1',",
+      "",
+      "  async execute(interaction, client) {",
+      "    const $2 = interaction.fields.getTextInputValue('$3')",
+      "    $0",
+      "  }",
+      "} satisfies ModalHandler"
+    ],
+    "description": "Discord modal interaction handler"
+  },
+  "Discord String Select Menu Handler": {
+    "scope": "typescript",
+    "prefix": "stringSelectHandler",
+    "body": [
+      "import type { StringSelectMenuHandler } from '@/types/interactions'",
+      "",
+      "export default {",
+      "  customId: '$1',",
+      "",
+      "  async execute(interaction, client) {",
+      "    const selected = interaction.values[0]",
+      "    $0",
+      "  }",
+      "} satisfies StringSelectMenuHandler"
+    ],
+    "description": "Discord string select menu handler"
+  },
+  "Discord User Select Menu Handler": {
+    "scope": "typescript",
+    "prefix": "userSelectHandler",
+    "body": [
+      "import type { UserSelectMenuHandler } from '@/types/interactions'",
+      "",
+      "export default {",
+      "  customId: '$1',",
+      "",
+      "  async execute(interaction, client) {",
+      "    const userId = interaction.values[0]",
+      "    const user = await client.users.fetch(userId)",
+      "    $0",
+      "  }",
+      "} satisfies UserSelectMenuHandler"
+    ],
+    "description": "Discord user select menu handler"
+  },
+  "Discord Role Select Menu Handler": {
+    "scope": "typescript",
+    "prefix": "roleSelectHandler",
+    "body": [
+      "import type { RoleSelectMenuHandler } from '@/types/interactions'",
+      "",
+      "export default {",
+      "  customId: '$1',",
+      "",
+      "  async execute(interaction, client) {",
+      "    const roleId = interaction.values[0]",
+      "    const role = interaction.guild?.roles.cache.get(roleId)",
+      "    $0",
+      "  }",
+      "} satisfies RoleSelectMenuHandler"
+    ],
+    "description": "Discord role select menu handler"
+  },
+  "Discord Mentionable Select Menu Handler": {
+    "scope": "typescript",
+    "prefix": "mentionableSelectHandler",
+    "body": [
+      "import type { MentionableSelectMenuHandler } from '@/types/interactions'",
+      "",
+      "export default {",
+      "  customId: '$1',",
+      "",
+      "  async execute(interaction, client) {",
+      "    const mentionableId = interaction.values[0]",
+      "    $0",
+      "  }",
+      "} satisfies MentionableSelectMenuHandler"
+    ],
+    "description": "Discord mentionable select menu handler"
+  },
+  "Discord Channel Select Menu Handler": {
+    "scope": "typescript",
+    "prefix": "channelSelectHandler",
+    "body": [
+      "import type { ChannelSelectMenuHandler } from '@/types/interactions'",
+      "",
+      "export default {",
+      "  customId: '$1',",
+      "",
+      "  async execute(interaction, client) {",
+      "    const channelId = interaction.values[0]",
+      "    const channel = await client.channels.fetch(channelId)",
+      "    $0",
+      "  }",
+      "} satisfies ChannelSelectMenuHandler"
+    ],
+    "description": "Discord channel select menu handler"
+  }
+}
