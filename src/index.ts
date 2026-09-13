@@ -1,4 +1,4 @@
-import { Client, Collection, GatewayIntentBits } from 'discord.js'
+import { Client, Collection, GatewayIntentBits, Partials } from 'discord.js'
 import { token } from './config/env'
 
 import loadCommands from './handlers/commands'
@@ -10,8 +10,10 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.MessageContent
-  ]
+  ],
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User]
 })
 
 client.prefixCommands = new Collection()

@@ -50,7 +50,10 @@ export default {
             const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null)
             if (!messages || messages.size === 0) continue
 
-            await channel.bulkDelete(messages, true).catch(() => null)
+            const deletable = messages.filter(m => !m.pinned)
+            if (deletable.size === 0) continue
+
+            await channel.bulkDelete(deletable, true).catch(() => null)
           }
         }
       ],

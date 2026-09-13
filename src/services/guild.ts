@@ -46,6 +46,23 @@ export async function addPurgeChannel(channelId: string, intervalMinutes: number
   return config
 }
 
+export async function setStarboardThreshold(stars: number): Promise<GuildDocument> {
+  const config = await Guild.findOneAndUpdate(
+    { guildId },
+    { $set: { starboardThreshold: stars } },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  )
+
+  if (!config) {
+    throw new Error('Failed to update starboard configuration')
+  }
+
+  configCache = config
+  cacheTime = Date.now()
+
+  return config
+}
+
 export async function removePurgeChannel(channelId: string): Promise<GuildDocument> {
   const config = await Guild.findOneAndUpdate(
     { guildId },
