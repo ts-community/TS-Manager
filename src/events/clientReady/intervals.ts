@@ -4,6 +4,11 @@ import { runInterval } from '../../utils/interval'
 import { buildBrawlStarsEmbeds } from '../../services/brawlStars'
 import { getGuildConfig } from '../../services/guild'
 import {
+  BUSCAR_EQUIPO_CHANNEL_ID,
+  isBuscarEquipoSticky,
+  refreshBuscarEquipoSticky
+} from '../../services/buscarEquipo'
+import {
   brawlStarsChannelId,
   brawlStarsMessageId
 } from '../../config/env'
@@ -50,10 +55,16 @@ export default {
             const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null)
             if (!messages || messages.size === 0) continue
 
-            const deletable = messages.filter(m => !m.pinned)
+            const deletable = messages.filter(
+              m => !m.pinned && !isBuscarEquipoSticky(m, client.user?.id)
+            )
             if (deletable.size === 0) continue
 
             await channel.bulkDelete(deletable, true).catch(() => null)
+
+            if (channelId === BUSCAR_EQUIPO_CHANNEL_ID) {
+              await refreshBuscarEquipoSticky(client)
+            }
           }
         }
       ],
