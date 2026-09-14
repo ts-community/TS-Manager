@@ -8,29 +8,26 @@ import logger from '../../utils/logger'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-async function loadHandler(folder: string, customId: string) {
-  // Try exact match
-  try {
-    const handlerPath = path.join(__dirname, '../../interactions', folder, `${customId}.ts`)
+async function importHandler(folder: string, name: string) {
+  for (const extension of ['.ts', '.js']) {
+    const handlerPath = path.join(__dirname, '../../interactions', folder, `${name}${extension}`)
+    if (!fs.existsSync(handlerPath)) continue
 
-    if (fs.existsSync(handlerPath)) {
-      const handler = await import(pathToFileURL(handlerPath).href)
-      return handler.default
-    }
-  } catch {
-    // Try dynamic match (prefix before ":")
-    if (customId.includes(':')) {
-      const prefix = customId.split(':')[0]
-      try {
-        const handlerPath = path.join(__dirname, '../../interactions', folder, `${prefix}.ts`)
-
-        if (fs.existsSync(handlerPath)) {
-          const handler = await import(pathToFileURL(handlerPath).href)
-          return handler.default
-        }
-      } catch {}
-    }
+    const handler = await import(pathToFileURL(handlerPath).href)
+    return handler.default
   }
+
+  return null
+}
+
+async function loadHandler(folder: string, customId: string) {
+  const exactHandler = await importHandler(folder, customId)
+  if (exactHandler) return exactHandler
+
+  if (customId.includes(':')) {
+    return importHandler(folder, customId.split(':')[0])
+  }
+
   return null
 }
 

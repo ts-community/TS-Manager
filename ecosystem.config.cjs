@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'discord-bot-template',
+      name: 'TSManager',
       script: 'dist/index.js',
       exec_mode: 'fork',
       instances: 1,
