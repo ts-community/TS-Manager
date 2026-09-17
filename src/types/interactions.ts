@@ -2,6 +2,7 @@ import type {
   ButtonInteraction,
   ModalSubmitInteraction,
   AnySelectMenuInteraction,
+  StringSelectMenuInteraction,
   ContextMenuCommandInteraction,
   ContextMenuCommandBuilder,
   Client
@@ -19,7 +20,7 @@ export interface ModalHandler {
 
 export interface SelectMenuHandler {
   customId: string
-  execute: (interaction: AnySelectMenuInteraction, client: Client) => Promise<void>
+  execute: (interaction: StringSelectMenuInteraction, client: Client) => Promise<void>
 }
 
 export interface ContextMenuHandler {
