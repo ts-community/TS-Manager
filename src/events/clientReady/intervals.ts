@@ -1,7 +1,7 @@
 import { ChannelType } from 'discord.js'
 import type { Event } from '../../types/events'
 import { runInterval } from '../../utils/interval'
-import { buildBrawlStarsEmbeds } from '../../services/brawlStars'
+import { buildBrawlStarsEmbeds, refreshClubTemplate } from '../../services/brawlStars'
 import { getGuildConfig } from '../../services/guild'
 import {
   BUSCAR_EQUIPO_CHANNEL_ID,
@@ -35,6 +35,16 @@ export default {
         }
       ],
       1000 * 20
+    )
+
+    // Plantilla de promoción de clubes (legacy): edita los 2 mensajes con datos live.
+    runInterval(
+      [
+        async function refreshPlantillaClubes() {
+          await refreshClubTemplate(client)
+        }
+      ],
+      1000 * 60 * 15
     )
 
     runInterval(
