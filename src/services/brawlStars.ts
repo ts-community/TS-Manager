@@ -4,7 +4,7 @@ import { formatCountry, getCountryFlag } from '../config/countries'
 import { DEFAULT_CLUB_COUNTRY, getGuildConfig, resolveClubEntries } from './guild'
 import logger from '../utils/logger'
 
-const CLUB_EMOJI = '<:club:1467133380905795848>'
+const CLUB_EMOJI = '<:Club:1275522702446301338>'
 const EMOJI_MEMBERS = '<:members:1467129799771426931>'
 const EMOJI_PRESIDENT = '<:presidente:1467129797992906917>'
 const EMOJI_CLOSED = '<:clubcerrado:1467127831078375569>'
@@ -15,6 +15,8 @@ const EMOJI_TOP_GLOBAL = '<:topglobal:1467116653149032565>'
 const EMOJI_REQUIREMENT = '<:requisitodecopas:1385558827826544640>'
 const EMOJI_VICE_PRESIDENT = '<:vice:1467129801281376362>'
 const EMOJI_VETERAN = '<:vete:1467126232326868992>'
+const EMOJI_CLUBS = '<:club:1467133380905795848>'
+const EMOJI_MEMBERS_COUNT = '<:members:1467129799771426931>'
 
 
 
@@ -201,42 +203,38 @@ function formatVicePresident(club: BrawlClubInfo): string {
   return `[${club.vicePresidentName}](${createPlayerUrl(club.vicePresidentTag)})`
 }
 
-function formatGlobalRank(club: BrawlClubInfo): string {
-  if (!club.globalRank) return 'Sin top global'
+function formatTopRanks(club: BrawlClubInfo): string | null {
+  const parts: string[] = []
+  if (club.localRank) parts.push(`\`#${formatNumber(club.localRank)}\` ${countryCodeToFlag(club.countryCode)}`)
+  if (club.globalRank) parts.push(`\`#${formatNumber(club.globalRank)}\` ${EMOJI_TOP_GLOBAL}`)
+  if (parts.length === 0) return null
 
-  return `Top Global #${formatNumber(club.globalRank)}`
+  return parts.join(' ')
 }
 
-function formatLocalRank(club: BrawlClubInfo): string {
-  const flag = countryCodeToFlag(club.countryCode)
-  if (!club.localRank) return `${flag} Sin top ${club.countryCode}`
-
-  return `${flag} Top ${club.countryCode} #${formatNumber(club.localRank)}`
-}
-
-function createSummaryEmbed(clubs: BrawlClubInfo[], updatedAt: string): EmbedBuilder {
+function createSummaryEmbed(clubs: BrawlClubInfo[], updatedAt: string, thumbnailUrl?: string): EmbedBuilder {
   const totalTrophies = clubs.reduce((sum, club) => sum + club.trophies, 0)
   const totalMembers = clubs.reduce((sum, club) => sum + club.membersCount, 0)
   const averageTrophies = clubs.length > 0 ? Math.round(totalTrophies / clubs.length) : 0
   const totalVicePresidents = clubs.reduce((sum, club) => sum + club.vicePresidentCount, 0)
   const totalVeterans = clubs.reduce((sum, club) => sum + club.veteranCount, 0)
-  const bestGlobal = clubs.map(c => c.globalRank).filter((r): r is number => r !== null).sort((a, b) => a - b)[0] ?? null
-  const bestLocal = clubs.map(c => c.localRank).filter((r): r is number => r !== null).sort((a, b) => a - b)[0] ?? null
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor('#6f2cff')
-    .setTitle('Info Clubes TS')
+    .setDescription('## 📊 Info Clubes TS')
     .addFields(
       { name: 'Total Trofeos:', value: `${EMOJI_TROPHIES} ${formatNumber(totalTrophies)}`, inline: true },
-      { name: 'Total Clubs:', value: `🔴 ${formatNumber(clubs.length)}`, inline: true },
-      { name: 'Total Miembros:', value: `👥 ${formatNumber(totalMembers)}`, inline: true },
+      { name: 'Total Clubs:', value: `${EMOJI_CLUBS} ${formatNumber(clubs.length)}`, inline: true },
+      { name: 'Total Miembros:', value: `${EMOJI_MEMBERS_COUNT} ${formatNumber(totalMembers)}`, inline: true },
       { name: 'Promedio Trofeos:', value: `${EMOJI_TROPHIES} ${formatNumber(averageTrophies)}`, inline: true },
       { name: 'Vicepresidentes:', value: `${EMOJI_VICE_PRESIDENT} ${formatNumber(totalVicePresidents)}`, inline: true },
-      { name: 'Veteranos:', value: `${EMOJI_VETERAN} ${formatNumber(totalVeterans)}`, inline: true },
-      { name: 'Mejor Top Global:', value: bestGlobal ? `${EMOJI_TOP_GLOBAL} #${formatNumber(bestGlobal)}` : `${EMOJI_TOP_GLOBAL} Sin top`, inline: true },
-      { name: 'Mejor Top Local:', value: bestLocal ? `🏆 #${formatNumber(bestLocal)}` : '🏆 Sin top', inline: true }
+      { name: 'Veteranos:', value: `${EMOJI_VETERAN} ${formatNumber(totalVeterans)}`, inline: true }
     )
     .setFooter({ text: `Última actualización: ${updatedAt}` })
+
+  if (thumbnailUrl) embed.setThumbnail(thumbnailUrl)
+
+  return embed
 }
 
 function createClubListEmbed(clubs: BrawlClubInfo[], updatedAt: string): EmbedBuilder {
@@ -244,11 +242,11 @@ function createClubListEmbed(clubs: BrawlClubInfo[], updatedAt: string): EmbedBu
 
   const fields = visibleClubs.map(club => {
     const status = formatStatus(club.type)
+    const topRanks = formatTopRanks(club)
     const lines = [
       `**${CLUB_EMOJI} ${formatClubName(club)}**`,
       `${EMOJI_TROPHIES} \`${formatNumber(club.trophies)}\``,
-      `${EMOJI_TOP_GLOBAL} ${formatGlobalRank(club)}`,
-      `${formatLocalRank(club)}`,
+      ...(topRanks ? [topRanks] : []),
       `${EMOJI_PRESIDENT} ${formatPresident(club)}`,
       `${EMOJI_REQUIREMENT} \`${formatNumber(club.requiredTrophies)}\``,
       `${EMOJI_MEMBERS} \`${formatNumber(club.membersCount)}\``,
@@ -272,12 +270,12 @@ function createClubListEmbed(clubs: BrawlClubInfo[], updatedAt: string): EmbedBu
 
   return new EmbedBuilder()
     .setColor('#22d3ee')
-    .setTitle('Clubes TS - Página 1')
+    .setTitle(`### ${CLUB_EMOJI} Clubes TS`)
     .addFields(fields)
     .setFooter({ text: `Última actualización: ${updatedAt}` })
 }
 
-export async function buildBrawlStarsEmbeds(): Promise<EmbedBuilder[] | null> {
+export async function buildBrawlStarsEmbeds(client: Client): Promise<EmbedBuilder[] | null> {
   if (!brawlStarsApiToken) return null
 
   const config = await getGuildConfig()
@@ -295,9 +293,10 @@ export async function buildBrawlStarsEmbeds(): Promise<EmbedBuilder[] | null> {
   validClubs.sort((a, b) => b.trophies - a.trophies)
 
   const updatedAt = formatUpdateTime(new Date())
+  const thumbnailUrl = client.user?.displayAvatarURL() ?? undefined
 
   return [
-    createSummaryEmbed(validClubs, updatedAt),
+    createSummaryEmbed(validClubs, updatedAt, thumbnailUrl),
     createClubListEmbed(validClubs, updatedAt)
   ]
 }
@@ -369,6 +368,21 @@ function buildTimestampContent(formattedDate: string): string {
 *Plantilla actualizada cada 2 min, última actualización a las \`${formattedDate}\`.*
     ** **
 `
+}
+
+function formatTemplateRequired(required: number): string {
+  const num = required < 1000
+    ? `${required}`
+    : `${`${Math.round((required / 1000) * 10) / 10}`.replace(/\.0$/, '')}k`
+  return `+ ${num.padStart(4)} 🏆`
+}
+
+function formatTemplateRanks(globalRank: number | null, localRank: number | null, flag: string): string {
+  const parts: string[] = []
+  if (localRank) parts.push(`${`#${localRank}`.padEnd(4)} ${flag}`)
+  if (globalRank) parts.push(`${`#${globalRank}`.padEnd(4)} 🌍`)
+
+  return parts.join(' ')
 }
 
 function buildPromoContent(members: string, clubs: number, clubsValues: string): string {
@@ -448,23 +462,22 @@ export async function refreshClubTemplate(client: Client): Promise<void> {
       const club = await fetchTemplateClub(clubTag)
       if (!club) continue
 
-      const name = club.name ?? tag
+      const name = (club.name ?? tag).slice(0, 17).padEnd(17)
       const trophies = club.trophies ?? 0
-      const trophiesText = `${trophies.toLocaleString('es').padEnd(10)}🏆`
+      const trophiesNum = trophies.toLocaleString('es').padStart(10)
       const required = club.requiredTrophies ?? 0
-      const requiredText =
-        required < 1000 ? `+ ${required} 🏆` : `+ ${required / 1000}k 🏆`
+      const requiredText = formatTemplateRequired(required)
 
       const key = tag.trim().toUpperCase()
       const globalRank = globalRanks.get(key) ?? null
       const localRank = localByCountry.get(countryCode)?.get(key) ?? null
       const flag = countryCodeToFlag(countryCode)
-      const globalText = globalRank ? `G#${globalRank}` : 'G--'
-      const localText = localRank ? `L#${localRank}${flag}` : `L--${flag}`
-      const rankingText = `${globalText} ${localText}`
+      const rankingText = formatTemplateRanks(globalRank, localRank, flag)
+
+      const line = `${name}${trophiesNum} 🏆  ${requiredText}  ${rankingText}`.trimEnd()
 
       details.push({
-        value: `${name.padEnd(17)}${trophiesText.padEnd(17)}${requiredText.padEnd(17)}${rankingText}`,
+        value: line,
         trophies
       })
     }

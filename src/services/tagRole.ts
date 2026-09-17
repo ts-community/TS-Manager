@@ -112,11 +112,11 @@ async function applyRole(member: GuildMember, hasCorrectTag: boolean): Promise<v
         embeds: [
           new EmbedBuilder()
             .setColor(0xe74c3c)
-            .setAuthor({ name: guildName, iconURL: guildIcon })
             .setDescription(
-              `${TAG_EMOJI} Etiqueta eliminada\n` +
+              `${TAG_EMOJI} Etiqueta retirada\n` +
                 `Se te ha retirado el rol **${TAG_ROLE_NAME}** por no tener la etiqueta ${TAG_EMOJI} **${TAG}**`
             )
+            .setFooter({ text: guildName, iconURL: guildIcon })
             .setTimestamp()
         ]
       })
@@ -131,6 +131,7 @@ async function applyRole(member: GuildMember, hasCorrectTag: boolean): Promise<v
               `### ${TAG_EMOJI} Etiqueta retirada\n` +
                 `Rol <@&${TAG_ROLE_ID}> retirado a <@${member.user.id}> por no tener la etiqueta ${TAG_EMOJI} **${TAG}**`
             )
+            .setFooter({ text: guildName, iconURL: guildIcon })
             .setTimestamp()
         ]
       })
