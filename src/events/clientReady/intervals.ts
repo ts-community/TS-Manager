@@ -24,7 +24,7 @@ export default {
         async function refreshBrawlStarsEmbed() {
           if (!brawlStarsChannelId || !brawlStarsMessageId) return
 
-          const embeds = await buildBrawlStarsEmbeds()
+          const embeds = await buildBrawlStarsEmbeds(client)
           if (!embeds) return
 
           const channel = await client.channels.fetch(brawlStarsChannelId)

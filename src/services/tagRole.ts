@@ -36,6 +36,11 @@ const priorityQueue: string[] = []
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
+function getTagCount(): number {
+  if (!guildRef) return 0
+  return guildRef.members.cache.filter((m) => m.roles.cache.has(TAG_ROLE_ID)).size
+}
+
 async function fetchTag(userId: string): Promise<PrimaryGuild | null> {
   while (true) {
     try {
@@ -97,6 +102,10 @@ async function applyRole(member: GuildMember, hasCorrectTag: boolean): Promise<v
               `### ${TAG_EMOJI} Etiqueta establecida\n` +
                 `Rol <@&${TAG_ROLE_ID}> otorgado a <@${member.user.id}> por tener la etiqueta ${TAG_EMOJI} **${TAG}**`
             )
+            .setFooter({
+              text: `Miembros con la etiqueta: ${getTagCount()}`,
+              iconURL: guildIcon
+            })
             .setTimestamp()
         ]
       })
@@ -112,11 +121,11 @@ async function applyRole(member: GuildMember, hasCorrectTag: boolean): Promise<v
         embeds: [
           new EmbedBuilder()
             .setColor(0xe74c3c)
-            .setAuthor({ name: guildName, iconURL: guildIcon })
             .setDescription(
-              `${TAG_EMOJI} Etiqueta eliminada\n` +
+              `${TAG_EMOJI} Etiqueta retirada\n` +
                 `Se te ha retirado el rol **${TAG_ROLE_NAME}** por no tener la etiqueta ${TAG_EMOJI} **${TAG}**`
             )
+            .setFooter({ text: guildName, iconURL: guildIcon })
             .setTimestamp()
         ]
       })
@@ -131,6 +140,10 @@ async function applyRole(member: GuildMember, hasCorrectTag: boolean): Promise<v
               `### ${TAG_EMOJI} Etiqueta retirada\n` +
                 `Rol <@&${TAG_ROLE_ID}> retirado a <@${member.user.id}> por no tener la etiqueta ${TAG_EMOJI} **${TAG}**`
             )
+            .setFooter({
+              text: `Miembros con la etiqueta: ${getTagCount()}`,
+              iconURL: guildIcon
+            })
             .setTimestamp()
         ]
       })

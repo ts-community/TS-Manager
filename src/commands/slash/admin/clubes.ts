@@ -9,7 +9,8 @@ import {
   findLegacyClubTags,
   isValidCountryCode,
   normalizeCountryCode,
-  resolveClubEntries
+  resolveClubEntries,
+  type ResolvedClub
 } from '../../../services/guild'
 
 const CLUB_EMOJI = '<:Club:1275522702446301338>'
@@ -42,73 +43,58 @@ function formatClubDisplay(name: string | null, tag: string, countryCode: string
   return `${CLUB_EMOJI} **${name}** \`${tag}\` · ${country}`
 }
 
+async function resolveTargetTag(
+  entries: ResolvedClub[],
+  tagInput: string | null,
+  nombreInput: string | null
+): Promise<{ tag: string | null; notFoundName: boolean }> {
+  if (tagInput?.trim()) return { tag: normalizeTag(tagInput), notFoundName: false }
+  if (!nombreInput?.trim()) return { tag: null, notFoundName: false }
+
+  const wanted = nombreInput.trim().toLowerCase()
+  const names = await Promise.all(entries.map(async e => ({ tag: e.tag, name: await getClubName(e.tag) })))
+  const found = names.find(n => n.name?.toLowerCase() === wanted)
+
+  return found ? { tag: found.tag, notFoundName: false } : { tag: null, notFoundName: true }
+}
+
 export default {
   data: new SlashCommandBuilder()
     .setName('clubes')
-    .setDescription('Gestionar tags de clubes de Brawl Stars')
-    .addSubcommand(sub =>
-      sub
-        .setName('agregar')
-        .setDescription('Agregar un tag de club')
-        .addStringOption(opt =>
-          opt
-            .setName('tag')
-            .setDescription('Tag del club, por ejemplo #2ABC123')
-            .setRequired(true)
-        )
-        .addStringOption(opt =>
-          opt
-            .setName('pais')
-            .setDescription('País para el top local, ej. ES (España), MX (México)')
-            .setRequired(false)
-            .setMinLength(2)
-            .setMaxLength(2)
+    .setDescription('Gestionar clubes de Brawl Stars (sin parámetros muestra el resumen)')
+    .addStringOption(opt =>
+      opt
+        .setName('accion')
+        .setDescription('Qué hacer: agregar, remover o editar el país')
+        .setRequired(false)
+        .addChoices(
+          { name: 'agregar', value: 'agregar' },
+          { name: 'remover', value: 'remover' },
+          { name: 'editar', value: 'editar' }
         )
     )
-    .addSubcommand(sub =>
-      sub
-        .setName('remover')
-        .setDescription('Remover un tag de club')
-        .addStringOption(opt =>
-          opt
-            .setName('tag')
-            .setDescription('Tag del club a remover')
-            .setRequired(true)
-        )
+    .addStringOption(opt =>
+      opt
+        .setName('tag')
+        .setDescription('Tag del club, por ejemplo #2ABC123')
+        .setRequired(false)
     )
-    .addSubcommand(sub =>
-      sub
+    .addStringOption(opt =>
+      opt
+        .setName('nombre')
+        .setDescription('Nombre del club (alternativa al tag para remover/editar)')
+        .setRequired(false)
+    )
+    .addStringOption(opt =>
+      opt
         .setName('pais')
-        .setDescription('Cambiar el país del top local de un club')
-        .addStringOption(opt =>
-          opt
-            .setName('tag')
-            .setDescription('Tag del club')
-            .setRequired(true)
-        )
-        .addStringOption(opt =>
-          opt
-            .setName('pais')
-            .setDescription('Nuevo país, ej. ES (España), MX (México)')
-            .setRequired(true)
-            .setMinLength(2)
-            .setMaxLength(2)
-        )
-    )
-    .addSubcommand(sub =>
-      sub
-        .setName('ver')
-        .setDescription('Ver los tags de clubes configurados')
-    )
-    .addSubcommand(sub =>
-      sub
-        .setName('revisar')
-        .setDescription('Verificar que cada club tenga su país asignado')
+        .setDescription('País para el top local, ej. ES (España), MX (México)')
+        .setRequired(false)
+        .setMinLength(2)
+        .setMaxLength(2)
     ),
 
   async execute(interaction) {
-    const sub = interaction.options.getSubcommand()
-
     if (!interaction.guild) {
       return interaction.reply({
         content: 'Este comando solo puede ser usado en servidores.',
@@ -122,7 +108,7 @@ export default {
 
     // Migración automática: los tags guardados en formato antiguo (string)
     // pasan a { tag, countryCode } con ES por defecto para que cada club
-    // tenga siempre su país. Se ejecuta sola al usar cualquier subcomando.
+    // tenga siempre su país.
     const legacyTags = findLegacyClubTags(config.clubTags)
     if (legacyTags.length > 0) {
       const entries = resolveClubEntries(config.clubTags)
@@ -141,80 +127,15 @@ export default {
       return interaction.reply({ embeds: [embed] })
     }
 
-    if (sub === 'agregar') {
-      const tag = normalizeTag(interaction.options.getString('tag', true))
-      const paisInput = interaction.options.getString('pais', false)
-
-      if (paisInput !== null && !isValidCountryCode(paisInput)) {
-        return replyEmbed('Red', `País no válido. ${PAIS_HINT}`)
-      }
-
-      const countryCode = normalizeCountryCode(paisInput ?? DEFAULT_CLUB_COUNTRY)
-      const entries = resolveClubEntries(config.clubTags)
-
-      if (entries.some(e => e.tag === tag)) {
-        return replyEmbed('Red', `${tag} ya está configurado.`)
-      }
-
-      config.clubTags.push({ tag, countryCode })
-      // Mongoose con Mixed necesita marcar el cambio
-      config.markModified('clubTags')
-      await config.save()
-
-      const clubName = await getClubName(tag)
-
-      return replyEmbed('Green', `${formatClubDisplay(clubName, tag, countryCode)} añadido a los clubes.`)
-    }
-
-    if (sub === 'remover') {
-      const tag = normalizeTag(interaction.options.getString('tag', true))
-      const entries = resolveClubEntries(config.clubTags)
-
-      if (!entries.some(e => e.tag === tag)) {
-        return replyEmbed('Red', `${tag} no está configurado.`)
-      }
-
-      config.clubTags = entries
-        .filter(e => e.tag !== tag)
-        .map(e => ({ tag: e.tag, countryCode: e.countryCode }))
-      config.markModified('clubTags')
-      await config.save()
-
-      return replyEmbed('Red', `${tag} eliminado de los clubes.`)
-    }
-
-    if (sub === 'pais') {
-      const tag = normalizeTag(interaction.options.getString('tag', true))
-      const paisInput = interaction.options.getString('pais', true)
-
-      if (!isValidCountryCode(paisInput)) {
-        return replyEmbed('Red', `País no válido. ${PAIS_HINT}`)
-      }
-
-      const countryCode = normalizeCountryCode(paisInput)
-      const entries = resolveClubEntries(config.clubTags)
-      const existing = entries.find(e => e.tag === tag)
-
-      if (!existing) {
-        return replyEmbed('Red', `${tag} no está configurado. Usa \`/clubes agregar\` primero.`)
-      }
-
-      config.clubTags = entries.map(e =>
-        e.tag === tag ? { tag: e.tag, countryCode } : { tag: e.tag, countryCode: e.countryCode }
-      )
-      config.markModified('clubTags')
-      await config.save()
-
-      const clubName = await getClubName(tag)
-
-      return replyEmbed('Green', `${formatClubDisplay(clubName, tag, countryCode)} actualizado al top local de ${getCountryName(countryCode)}.`)
-    }
-
-    if (sub === 'ver') {
+    const buildResumen = async (): Promise<{ color: ColorResolvable; description: string; title: string }> => {
       const entries = resolveClubEntries(config.clubTags)
 
       if (entries.length === 0) {
-        return replyEmbed('Blue', 'No hay tags configurados.', 'Clubes')
+        return {
+          color: 'Blue',
+          description: `No hay clubes configurados.\n\nAgrega uno con \`/clubes accion:agregar tag:#TU_TAG pais:ES\`. ${PAIS_HINT}`,
+          title: 'Clubes'
+        }
       }
 
       const tags = await Promise.all(
@@ -232,37 +153,126 @@ export default {
         .map(([code, count]) => `${countryCodeToFlag(code)} ${getCountryName(code)}: ${count}`)
         .join(' · ')
 
-      const list = `${tags.join('\n')}\n\n**${entries.length} clubes** · ${summary}`
-
-      return replyEmbed('Blue', list, 'Tags de Clubes')
-    }
-
-    if (sub === 'revisar') {
-      const entries = resolveClubEntries(config.clubTags)
-
-      if (entries.length === 0) {
-        return replyEmbed('Blue', 'No hay tags configurados.', 'Revisión de países')
-      }
+      const lines = [...tags, '', `**${entries.length} clubes** · ${summary}`]
 
       const withoutCountry = entries.filter(e => !e.explicitCountry)
-      const byCountry = new Map<string, string[]>()
-      for (const { tag, countryCode } of entries) {
-        if (!byCountry.has(countryCode)) byCountry.set(countryCode, [])
-        byCountry.get(countryCode)!.push(tag)
+      if (withoutCountry.length > 0) {
+        lines.push('')
+        lines.push(`⚠️ ${withoutCountry.length} club(es) usan el país por defecto \`${DEFAULT_CLUB_COUNTRY}\`: ${withoutCountry.map(e => `\`${e.tag}\``).join(', ')}`)
+        lines.push(`Cámbialo con \`/clubes accion:editar tag:<tag> pais:<código>\`. ${PAIS_HINT}`)
       }
 
-      const lines = [...byCountry.entries()].map(([code, tags]) =>
-        `${formatCountry(code)} — ${tags.length} club(es): ${tags.map(t => `\`${t}\``).join(', ')}`
-      )
-
-      if (withoutCountry.length === 0) {
-        lines.push(`\n✅ Todos los clubes tienen su país asignado (${entries.length}/${entries.length}).`)
-      } else {
-        lines.push(`\n⚠️ ${withoutCountry.length} club(es) usan el país por defecto \`${DEFAULT_CLUB_COUNTRY}\`: ${withoutCountry.map(e => `\`${e.tag}\``).join(', ')}`)
-        lines.push(`Asígnalo con \`/clubes pais tag:<tag> pais:<código>\`. ${PAIS_HINT}`)
+      return {
+        color: withoutCountry.length > 0 ? 'Yellow' : 'Blue',
+        description: lines.join('\n'),
+        title: 'Clubes'
       }
-
-      return replyEmbed(withoutCountry.length === 0 ? 'Green' : 'Yellow', lines.join('\n'), 'Revisión de países')
     }
+
+    const accion = interaction.options.getString('accion', false)
+    const tagInput = interaction.options.getString('tag', false)
+    const nombreInput = interaction.options.getString('nombre', false)
+    const paisInput = interaction.options.getString('pais', false)
+
+    // Sin parámetros: resumen de todos los clubes con sus propiedades.
+    if (!accion && !tagInput && !nombreInput && !paisInput) {
+      const resumen = await buildResumen()
+      return replyEmbed(resumen.color, resumen.description, resumen.title)
+    }
+
+    if (!accion) {
+      return replyEmbed('Red', 'Indica la acción: `accion:agregar`, `accion:remover` o `accion:editar`.\nSin parámetros muestra el resumen de clubes.')
+    }
+
+    if (accion === 'agregar') {
+      if (!tagInput?.trim()) {
+        return replyEmbed('Red', 'Te falta el `tag` del club. Ejemplo: `/clubes accion:agregar tag:#2ABC123 pais:ES`.')
+      }
+
+      if (paisInput !== null && !isValidCountryCode(paisInput)) {
+        return replyEmbed('Red', `País no válido. ${PAIS_HINT}`)
+      }
+
+      const tag = normalizeTag(tagInput)
+      const countryCode = normalizeCountryCode(paisInput ?? DEFAULT_CLUB_COUNTRY)
+      const entries = resolveClubEntries(config.clubTags)
+
+      if (entries.some(e => e.tag === tag)) {
+        return replyEmbed('Red', `${tag} ya está configurado.`)
+      }
+
+      config.clubTags.push({ tag, countryCode })
+      config.markModified('clubTags')
+      await config.save()
+
+      const clubName = await getClubName(tag)
+
+      return replyEmbed('Green', `${formatClubDisplay(clubName, tag, countryCode)} añadido a los clubes.`)
+    }
+
+    if (accion === 'remover') {
+      const entries = resolveClubEntries(config.clubTags)
+      const { tag, notFoundName } = await resolveTargetTag(entries, tagInput, nombreInput)
+
+      if (notFoundName) {
+        return replyEmbed('Red', `No encontré ningún club configurado con el nombre \`${nombreInput?.trim()}\`. Revisa el resumen con \`/clubes\`.`)
+      }
+
+      if (!tag) {
+        return replyEmbed('Red', 'Te falta el club. Indica `tag:#TU_TAG` o `nombre:Nombre del club`. Ejemplo: `/clubes accion:remover tag:#2ABC123`.')
+      }
+
+      if (!entries.some(e => e.tag === tag)) {
+        return replyEmbed('Red', `${tag} no está configurado. Revisa el resumen con \`/clubes\`.`)
+      }
+
+      config.clubTags = entries
+        .filter(e => e.tag !== tag)
+        .map(e => ({ tag: e.tag, countryCode: e.countryCode }))
+      config.markModified('clubTags')
+      await config.save()
+
+      return replyEmbed('Red', `${tag} eliminado de los clubes.`)
+    }
+
+    if (accion === 'editar') {
+      const entries = resolveClubEntries(config.clubTags)
+      const { tag, notFoundName } = await resolveTargetTag(entries, tagInput, nombreInput)
+
+      if (notFoundName) {
+        return replyEmbed('Red', `No encontré ningún club configurado con el nombre \`${nombreInput?.trim()}\`. Revisa el resumen con \`/clubes\`.`)
+      }
+
+      const faltan: string[] = []
+      if (!tag) faltan.push('`tag` (o `nombre`)')
+      if (!paisInput) faltan.push('`pais`')
+
+      if (faltan.length > 0) {
+        return replyEmbed('Red', `Te falta ${faltan.join(' y ')}. Ejemplo: \`/clubes accion:editar tag:#2ABC123 pais:MX\`. ${PAIS_HINT}`)
+      }
+
+      if (!isValidCountryCode(paisInput)) {
+        return replyEmbed('Red', `País no válido. ${PAIS_HINT}`)
+      }
+
+      const countryCode = normalizeCountryCode(paisInput)
+      const existing = entries.find(e => e.tag === tag)
+
+      if (!existing) {
+        return replyEmbed('Red', `${tag} no está configurado. Agrégalo primero con \`/clubes accion:agregar tag:${tag}\`.`)
+      }
+
+      config.clubTags = entries.map(e =>
+        e.tag === tag ? { tag: e.tag, countryCode } : { tag: e.tag, countryCode: e.countryCode }
+      )
+      config.markModified('clubTags')
+      await config.save()
+
+      const clubName = await getClubName(tag!)
+
+      return replyEmbed('Green', `${formatClubDisplay(clubName, tag!, countryCode)} actualizado al top local de ${getCountryName(countryCode)}.`)
+    }
+
+    return replyEmbed('Red', 'Acción no válida. Usa `accion:agregar`, `accion:remover` o `accion:editar`. Sin parámetros muestra el resumen de clubes.')
   }
 } satisfies SlashCommand
