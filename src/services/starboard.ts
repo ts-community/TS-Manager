@@ -5,13 +5,32 @@ import {
   type MessageReaction,
   type TextBasedChannel
 } from 'discord.js'
-import { getGuildConfig } from './guild'
+import { guildId } from '../config/env'
+import type { GuildDocument } from '../models/Guild'
+import Guild from '../models/Guild'
+import { getGuildConfig, setGuildConfigCache } from './guild'
 import logger from '../utils/logger'
 
 export const STARBOARD_CHANNEL_ID = '1317531432909930639'
 export const STARBOARD_EMOJI = '⭐'
 export const DEFAULT_STARBOARD_THRESHOLD = 3
 const FETCH_LIMIT = 100
+
+export async function setStarboardThreshold(stars: number): Promise<GuildDocument> {
+  const config = await Guild.findOneAndUpdate(
+    { guildId },
+    { $set: { starboardThreshold: stars } },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  )
+
+  if (!config) {
+    throw new Error('Failed to update starboard configuration')
+  }
+
+  setGuildConfigCache(config)
+
+  return config
+}
 
 function buildPayload(message: Message, stars: number) {
   const raw = message.content?.trim() ?? ''

@@ -1,5 +1,5 @@
 import type { SelectMenuHandler } from '../../types/interactions'
-import { createServiceTicket } from '../../services/services'
+import { openBriefingRequest } from '../../services/tickets'
 
 export default {
   customId: 'services-buy',
@@ -7,6 +7,6 @@ export default {
   async execute(interaction) {
     const service = interaction.values[0]
     if (service !== 'discord' && service !== 'web') return
-    await createServiceTicket(interaction, service)
+    await openBriefingRequest(interaction, service)
   }
 } satisfies SelectMenuHandler

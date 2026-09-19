@@ -3,15 +3,15 @@ import type { SlashCommand } from '../../../types/commands'
 import Guild from '../../../models/Guild'
 import { brawlStarsApiToken } from '../../../config/env'
 import { formatCountry, getCountryName } from '../../../config/countries'
-import { countryCodeToFlag } from '../../../services/brawlStars'
 import {
+  countryCodeToFlag,
   DEFAULT_CLUB_COUNTRY,
   findLegacyClubTags,
   isValidCountryCode,
   normalizeCountryCode,
   resolveClubEntries,
   type ResolvedClub
-} from '../../../services/guild'
+} from '../../../services/clubs'
 
 const CLUB_EMOJI = '<:Club:1275522702446301338>'
 const PAIS_HINT = 'Código ISO de 2 letras: `ES`, `MX`, `FR`, `US`… (todos los países soportados)'

@@ -1,7 +1,7 @@
 import { ChannelType } from 'discord.js'
 import type { Event } from '../../types/events'
 import { runInterval } from '../../utils/interval'
-import { buildBrawlStarsEmbeds, refreshClubTemplate } from '../../services/brawlStars'
+import { buildBrawlStarsEmbeds, refreshClubTemplate } from '../../services/clubs'
 import { getGuildConfig } from '../../services/guild'
 import {
   BUSCAR_EQUIPO_CHANNEL_ID,

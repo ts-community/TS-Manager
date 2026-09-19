@@ -107,7 +107,10 @@ async function applyRole(member: GuildMember, hasCorrectTag: boolean): Promise<v
               iconURL: guildIcon
             })
             .setTimestamp()
-        ]
+        ],
+        allowedMentions: {
+          users: [member.user.id]
+        }
       })
       .catch(() => null)
   }
@@ -145,7 +148,10 @@ async function applyRole(member: GuildMember, hasCorrectTag: boolean): Promise<v
               iconURL: guildIcon
             })
             .setTimestamp()
-        ]
+        ],
+        allowedMentions: {
+          users: [member.user.id]
+        }
       })
       .catch(() => null)
   }

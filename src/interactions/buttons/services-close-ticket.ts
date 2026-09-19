@@ -1,5 +1,5 @@
 import type { ButtonHandler } from '../../types/interactions'
-import { closeServiceTicket } from '../../services/services'
+import { closeServiceTicket } from '../../services/tickets'
 
 export default {
   customId: 'services-close-ticket',

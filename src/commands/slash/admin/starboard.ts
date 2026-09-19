@@ -1,7 +1,7 @@
 import { EmbedBuilder, SlashCommandBuilder } from 'discord.js'
 import type { SlashCommand } from '../../../types/commands'
-import { getGuildConfig, setStarboardThreshold } from '../../../services/guild'
-import { DEFAULT_STARBOARD_THRESHOLD, STARBOARD_CHANNEL_ID } from '../../../services/starboard'
+import { getGuildConfig } from '../../../services/guild'
+import { DEFAULT_STARBOARD_THRESHOLD, STARBOARD_CHANNEL_ID, setStarboardThreshold } from '../../../services/starboard'
 
 export default {
   data: new SlashCommandBuilder()

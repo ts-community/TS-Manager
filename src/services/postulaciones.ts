@@ -142,7 +142,7 @@ export async function handlePostulacionSubmit(interaction: ModalSubmitInteractio
         .setDisabled(true)
     )
 
-    await interaction.message?.edit({ embeds: [postEmbed], components: [disabledRow] }).catch(() => null)
+    await interaction.message?.edit({ embeds: [postEmbed], components: [disabledRow], allowedMentions: { users: [userID] } }).catch(() => null)
     await interaction.deferUpdate()
   } catch (error) {
     logger.error('Postulación submit failed', {
