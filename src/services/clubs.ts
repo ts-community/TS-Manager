@@ -281,8 +281,8 @@ function formatVicePresident(club: BrawlClubInfo): string {
 
 function formatTopRanks(club: BrawlClubInfo): string | null {
   const parts: string[] = []
-  if (club.localRank) parts.push(`\`#${formatNumber(club.localRank)}\` ${countryCodeToFlag(club.countryCode)}`)
-  if (club.globalRank) parts.push(`\`#${formatNumber(club.globalRank)}\` ${EMOJI_TOP_GLOBAL}`)
+  if (club.localRank) parts.push(`${countryCodeToFlag(club.countryCode)}\`#${formatNumber(club.localRank)}\``)
+  if (club.globalRank) parts.push(`${EMOJI_TOP_GLOBAL} \`#${formatNumber(club.globalRank)}\``)
   if (parts.length === 0) return null
 
   return parts.join(' ')
@@ -346,7 +346,7 @@ function createClubListEmbed(clubs: BrawlClubInfo[], updatedAt: string): EmbedBu
 
   return new EmbedBuilder()
     .setColor('#22d3ee')
-    .setTitle(`### ${CLUB_EMOJI} Clubes TS`)
+    .setDescription(`### ${CLUB_EMOJI} Clubes TS`)
     .addFields(fields)
     .setFooter({ text: `Última actualización: ${updatedAt}` })
 }

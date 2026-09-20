@@ -67,21 +67,22 @@ function selectRow(customId: string, placeholder: string, options: Array<{ label
 
 function servicesMessage(thumbnailUrl?: string) {
   const header = new TextDisplayBuilder().setContent([
-    '# Servicios de desarrollo',
-    'Bots de Discord y webs a medida. Opciones disponibles:'
+    '### 🛠️ Servicios de desarrollo\nSoluciones digitales profesionales y personalizadas para comunidades, servidores y proyectos. Descubre nuestro catálogo de servicios, encuentra la opción que mejor se adapte a tus necesidades y contacta con nuestro equipo para recibir asesoramiento y solicitar un presupuesto.'
   ].join('\n'))
   const list = new TextDisplayBuilder().setContent([
     '- 🤖 **Bots de Discord**. Automatización, sistemas y funciones a medida.',
     '- 🌐 **Webs y apps**. Landings, webs corporativas y paneles.'
   ].join('\n'))
   const terms = new TextDisplayBuilder().setContent(
-    'Presupuesto personalizado. Pago inicial del 50%; el resto se abona a la entrega.'
+    '⏱️ Respuesta en menos de 24 horas. Entrega estimada de 2–4 días en proyectos básicos y 7–15 días en avanzados.'
   )
   const note = new TextDisplayBuilder().setContent(
-    '-# Entrega del código tras el pago final. Respuesta en menos de 24 horas.'
+    '-# El código se entrega tras completar el pago.'
   )
   const divider = () =>
     new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
+  const spacer = () =>
+    new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small)
 
   const container = new ContainerBuilder().setAccentColor(0x6F2CFF)
   if (thumbnailUrl) {
@@ -94,7 +95,9 @@ function servicesMessage(thumbnailUrl?: string) {
     container.addTextDisplayComponents(header)
   }
   container.addSeparatorComponents(divider())
-  container.addTextDisplayComponents(list, terms, note)
+  container.addTextDisplayComponents(list, terms)
+  container.addSeparatorComponents(spacer())
+  container.addTextDisplayComponents(note)
   container.addSeparatorComponents(divider())
   container.addActionRowComponents(selectRow('services-info', 'Ver información', [
     { label: 'Bots de Discord', value: 'discord', description: 'Catálogo, tiers y precios', emoji: '🤖' },
