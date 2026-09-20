@@ -2,7 +2,7 @@
 
 Bot oficial de la comunidad de Brawl Stars, **TS Community Brawl**. Gestión de clubes, contratación de servicios con tickets por fases, starboard, postulaciones y utilidades de moderación.
 
-> Hecho a partir de la plantilla [discord.js-bots-template](https://github.com/discord.js-bots-template), creada por el owner de la comunidad, tumonulo.
+> Hecho a partir de la plantilla [discord.js-bots-template](https://github.com/tumonulo/discord.js-bots-template), creada por el owner de la comunidad, tumonulo.
 
 ## ✨ Funcionalidades
 
