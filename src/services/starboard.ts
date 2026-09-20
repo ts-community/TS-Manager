@@ -44,7 +44,7 @@ function buildPayload(message: Message, stars: number) {
   if (others.length > 0) {
     description += `\n\n${others.map(a => `[📎 ${a.name ?? 'adjunto'}](${a.url})`).join('\n')}`.slice(0, 4096 - description.length - 1)
   }
-  description += `\n\n[🔗 Ir al mensaje](${message.url})`
+  description += `\n-# [🔗 Ir al mensaje](${message.url})`
 
   const embed = new EmbedBuilder()
     .setColor('Gold')
@@ -59,7 +59,7 @@ function buildPayload(message: Message, stars: number) {
   if (image) embed.setImage(image.url)
 
   return {
-    content: `${STARBOARD_EMOJI} **${stars}** | <#${message.channel.id}>`,
+    content: `${STARBOARD_EMOJI} **${stars}** estrellas | en <#${message.channel.id}>`,
     embeds: [embed]
   }
 }
@@ -77,7 +77,7 @@ export async function countStars(reaction: MessageReaction, message: Message): P
   const users = await reaction.users.fetch()
   let count = 0
   for (const user of users.values()) {
-    if (user.bot || user.id === message.author.id) continue
+    if (user.bot) continue
     count++
   }
   return count
