@@ -1,4 +1,4 @@
-import type { Client, Guild } from 'discord.js'
+import { EmbedBuilder, type Client, type Guild } from 'discord.js'
 import EconomyBlacklist from '../models/EconomyBlacklist'
 import logger from '../utils/logger'
 
@@ -69,4 +69,25 @@ export async function expireBlacklist(client: Client): Promise<void> {
     else await EconomyBlacklist.deleteOne({ _id: entry._id })
     logger.info('Blacklist de economía caducada', { userId: entry.userId })
   }
+}
+
+/** Avisa por MD al usuario de que está en la blacklist. Devuelve false si tiene los MD cerrados. */
+export async function notifyBlacklisted(guild: Guild, userId: string, reason: string, expiresAt: Date | null): Promise<boolean> {
+  const user = await guild.client.users.fetch(userId).catch(() => null)
+  if (!user) return false
+
+  const embed = new EmbedBuilder()
+    .setColor('Red')
+    .setTitle(`Has sido añadido a la blacklist de economía de ${guild.name}`)
+    .setDescription(
+      'Ya no puedes jugar a la economía del servidor.\n\n' +
+      '⚠️ **Si vuelves a usar comandos de economía, en este canal o en cualquier otro, ' +
+      'el siguiente castigo será un ban de 1 mes del servidor.**'
+    )
+    .addFields(
+      { name: 'Motivo', value: reason },
+      { name: 'Expira', value: formatExpiry(expiresAt) }
+    )
+
+  return user.send({ embeds: [embed] }).then(() => true, () => false)
 }

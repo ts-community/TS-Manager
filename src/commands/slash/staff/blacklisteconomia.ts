@@ -5,7 +5,8 @@ import {
   addToBlacklist,
   removeFromBlacklist,
   parseDuration,
-  formatExpiry
+  formatExpiry,
+  notifyBlacklisted
 } from '../../../services/economyBlacklist'
 
 export default {
@@ -54,6 +55,8 @@ export default {
 
       const { entry, roleAdded, inGuild } = await addToBlacklist(interaction.guild, user.id, reason, interaction.user.id, duration)
 
+      const dmSent = await notifyBlacklisted(interaction.guild, user.id, reason, entry.expiresAt)
+
       const embed = new EmbedBuilder()
         .setColor('Red')
         .setTitle('Blacklist de economía')
@@ -64,6 +67,8 @@ export default {
         )
       if (!inGuild) embed.setFooter({ text: 'El usuario no está en el servidor: se le dará el rol cuando vuelva a escribir.' })
       else if (!roleAdded) embed.setFooter({ text: 'No pude darle el rol (revisa permisos y jerarquía del bot).' })
+
+      if (!dmSent) embed.addFields({ name: 'MD', value: 'No se pudo avisar por MD (los tiene cerrados).' })
 
       return interaction.reply({ embeds: [embed] })
     }
