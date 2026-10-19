@@ -9,7 +9,7 @@ import {
 } from '../../services/economyBlacklist'
 import logger from '../../utils/logger'
 
-const PREFIXES = ['!', '.']
+const PREFIXES = [',']
 
 // Devuelve [usuario, comando] si el mensaje es un comando de economía de otro bot
 function detectEconomyCommand(message: Message): { userId: string; command: string } | null {
