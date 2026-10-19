@@ -58,11 +58,11 @@ export default {
 
       await channel.send({
         content:
-          `⚠️ <@${detected.userId}> ha usado \`${detected.command}\` en <#${message.channelId}> estando en la blacklist de economía.\n` +
+          `@everyone\n⚠️ <@${detected.userId}> ha usado \`${detected.command}\` en <#${message.channelId}> estando en la blacklist de economía.\n` +
           `**Motivo:** ${entry.reason}\n` +
           `**Expira:** ${formatExpiry(entry.expiresAt)}\n` +
           `**Mensaje:** ${message.url}`,
-        allowedMentions: { parse: [] }
+        allowedMentions: { parse: ['everyone'] }
       })
     } catch (error) {
       logger.error('Blacklist economía: error procesando mensaje', {
