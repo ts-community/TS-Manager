@@ -1,4 +1,5 @@
 import type {
+  AutocompleteInteraction,
   Client,
   Message,
   ChatInputCommandInteraction,
@@ -36,6 +37,7 @@ export type AnySlashCommandBuilder =
 export interface SlashCommand extends BaseCommand {
   data: AnySlashCommandBuilder
   execute: (interaction: ChatInputCommandInteraction, client: Client) => Promise<unknown>
+  autocomplete?: (interaction: AutocompleteInteraction, client: Client) => Promise<unknown>
 }
 
 export interface SlashCommandInstance extends SlashCommand {

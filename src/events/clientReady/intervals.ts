@@ -8,6 +8,7 @@ import {
   isBuscarEquipoSticky,
   refreshBuscarEquipoSticky
 } from '../../services/buscarEquipo'
+import { expireBlacklist } from '../../services/economyBlacklist'
 import logger from '../../utils/logger'
 import {
   brawlStarsChannelId,
@@ -20,6 +21,15 @@ export default {
   once: true,
 
   async execute(client) {
+    runInterval(
+      [
+        async function expireEconomyBlacklist() {
+          await expireBlacklist(client)
+        }
+      ],
+      1000 * 30
+    )
+
     runInterval(
       [
         async function refreshBrawlStarsEmbed() {
