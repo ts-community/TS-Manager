@@ -135,11 +135,36 @@ function formatStatus(type: BrawlClubInfo['type']): { emoji: string; label: stri
   return { emoji: EMOJI_CLOSED, label: 'Cerrado' }
 }
 
-function formatUpdateTime(date: Date): string {
-  return new Intl.DateTimeFormat('es-ES', {
-    dateStyle: 'short',
-    timeStyle: 'medium'
-  }).format(date)
+function pluralize(value: number, singular: string, plural: string): string {
+  return `${value} ${value === 1 ? singular : plural}`
+}
+
+function formatRelativeTime(date: Date): string {
+  const totalSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000))
+
+  if (totalSeconds < 60) return `hace ${pluralize(totalSeconds, 'seg', 'segs')}`
+
+  const minutes = Math.floor(totalSeconds / 60)
+  if (minutes < 60) {
+    const seconds = totalSeconds % 60
+    return seconds > 0
+      ? `hace ${pluralize(minutes, 'min', 'mins')} y ${pluralize(seconds, 'seg', 'segs')}`
+      : `hace ${pluralize(minutes, 'min', 'mins')}`
+  }
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) {
+    const restMinutes = minutes % 60
+    return restMinutes > 0
+      ? `hace ${pluralize(hours, 'h', 'hs')} y ${pluralize(restMinutes, 'min', 'mins')}`
+      : `hace ${pluralize(hours, 'h', 'hs')}`
+  }
+
+  const days = Math.floor(hours / 24)
+  const restHours = hours % 24
+  return restHours > 0
+    ? `hace ${pluralize(days, 'día', 'días')} y ${pluralize(restHours, 'h', 'hs')}`
+    : `hace ${pluralize(days, 'día', 'días')}`
 }
 
 function normalizeTag(tag: string): string {
@@ -281,14 +306,14 @@ function formatVicePresident(club: BrawlClubInfo): string {
 
 function formatTopRanks(club: BrawlClubInfo): string | null {
   const parts: string[] = []
-  if (club.localRank) parts.push(`${countryCodeToFlag(club.countryCode)}\`#${formatNumber(club.localRank)}\``)
+  if (club.localRank) parts.push(`${countryCodeToFlag(club.countryCode)} \`#${formatNumber(club.localRank)}\``)
   if (club.globalRank) parts.push(`${EMOJI_TOP_GLOBAL} \`#${formatNumber(club.globalRank)}\``)
   if (parts.length === 0) return null
 
   return parts.join(' ')
 }
 
-function createSummaryEmbed(clubs: BrawlClubInfo[], updatedAt: string, thumbnailUrl?: string): EmbedBuilder {
+function createSummaryEmbed(clubs: BrawlClubInfo[], thumbnailUrl?: string): EmbedBuilder {
   const totalTrophies = clubs.reduce((sum, club) => sum + club.trophies, 0)
   const totalMembers = clubs.reduce((sum, club) => sum + club.membersCount, 0)
   const averageTrophies = clubs.length > 0 ? Math.round(totalTrophies / clubs.length) : 0
@@ -306,14 +331,13 @@ function createSummaryEmbed(clubs: BrawlClubInfo[], updatedAt: string, thumbnail
       { name: 'Vicepresidentes:', value: `${EMOJI_VICE_PRESIDENT} ${formatNumber(totalVicePresidents)}`, inline: true },
       { name: 'Veteranos:', value: `${EMOJI_VETERAN} ${formatNumber(totalVeterans)}`, inline: true }
     )
-    .setFooter({ text: `Última actualización: ${updatedAt}` })
 
   if (thumbnailUrl) embed.setThumbnail(thumbnailUrl)
 
   return embed
 }
 
-function createClubListEmbed(clubs: BrawlClubInfo[], updatedAt: string): EmbedBuilder {
+function createClubListEmbed(clubs: BrawlClubInfo[], updatedAt: Date): EmbedBuilder {
   const visibleClubs = clubs.slice(0, 24)
 
   const fields = visibleClubs.map(club => {
@@ -336,6 +360,14 @@ function createClubListEmbed(clubs: BrawlClubInfo[], updatedAt: string): EmbedBu
     }
   })
 
+  while (fields.length % 3 !== 0) {
+    fields.push({
+      name: '\u200b',
+      value: '\u200b',
+      inline: true
+    })
+  }
+
   if (clubs.length > visibleClubs.length) {
     fields.push({
       name: '\u200b',
@@ -346,9 +378,9 @@ function createClubListEmbed(clubs: BrawlClubInfo[], updatedAt: string): EmbedBu
 
   return new EmbedBuilder()
     .setColor('#22d3ee')
-    .setDescription(`### ${CLUB_EMOJI} Clubes TS`)
+    .setDescription(`## ${CLUB_EMOJI} Clubes TS`)
     .addFields(fields)
-    .setFooter({ text: `Última actualización: ${updatedAt}` })
+    .setFooter({ text: `Última actualización: ${formatRelativeTime(updatedAt)}` })
 }
 
 export async function buildBrawlStarsEmbeds(client: Client): Promise<EmbedBuilder[] | null> {
@@ -368,11 +400,11 @@ export async function buildBrawlStarsEmbeds(client: Client): Promise<EmbedBuilde
 
   validClubs.sort((a, b) => b.trophies - a.trophies)
 
-  const updatedAt = formatUpdateTime(new Date())
+  const updatedAt = new Date()
   const thumbnailUrl = client.user?.displayAvatarURL() ?? undefined
 
   return [
-    createSummaryEmbed(validClubs, updatedAt, thumbnailUrl),
+    createSummaryEmbed(validClubs, thumbnailUrl),
     createClubListEmbed(validClubs, updatedAt)
   ]
 }
@@ -450,36 +482,39 @@ function formatTemplateRequired(required: number): string {
   const num = required < 1000
     ? `${required}`
     : `${`${Math.round((required / 1000) * 10) / 10}`.replace(/\.0$/, '')}k`
-  return `+ ${num.padStart(4)} 🏆`
+  return num
 }
 
-function formatTemplateRanks(globalRank: number | null, localRank: number | null, flag: string): string {
+function formatRanksText(globalRank: number | null, localRank: number | null, flag: string): string {
   const parts: string[] = []
-  if (localRank) parts.push(`${`#${localRank}`.padEnd(4)} ${flag}`)
-  if (globalRank) parts.push(`${`#${globalRank}`.padEnd(4)} 🌍`)
-
+  if (localRank) parts.push(`#${localRank} ${flag}`)
+  if (globalRank) parts.push(`#${globalRank} 🌍`)
   return parts.join(' ')
 }
 
 function buildPromoContent(members: string, clubs: number, clubsValues: string): string {
   return `
-# \`T\` \`S\`   \`C\` \`O\` \`M\` \`U\` \`N\` \`I\` \`T\` \`Y\`
-** **
-**__Somos una amplia cadena de clubes que cuenta cuenta con clubes tanto en el top Español como en el Global __**
-   
-### 📙 QUE OFRECEMOS
-> - \`${clubs}\` clubes de Brawl Stars
-> - Comunidad de Discord con \`${members}\` miembros
-> - Staff experimentado en la creación de clubes
+## ✦₊୧ \`T\` \`S\`   \`C\` \`O\` \`M\` \`U\` \`N\` \`I\` \`T\` \`Y\` ୨₊✦
+### ✦₊꒷꒦︶︶︶୧ \`B\` \`R\`  \`A\`  \`W\` \`L\` ୨︶︶︶꒦꒷₊✦
 
-### 🔎 QUE BUSCAMOS
-> - Miembros activos para nuestros clubes
-> - Personas interesadas en la creación de clubes
+‎
+**Somos una amplia cadena de clubes
+presente en el top Español
+y en el top Global.**
 
-### 🛡️ NUESTROS CLUBES
+### ʚ —— ˗ ˏ QUE OFRECEMOS ˊˎ ˗ —— ɞ
+> **\`‎ ୧🔰୨\` \`${clubs}\` clubes de Brawl Stars**
+> **\`‎ ୧💬୨\` Comunidad de Discord con \`${members}\` miembros**
+> **\`‎ ୧🛠️୨\` Staff experimentado en la creación de clubes**
+
+### ʚ —— ˗ ˏ QUE BUSCAMOS ˊˎ ˗ —— ɞ
+> **\` ୧✨୨ \` Miembros activos para nuestros clubes**
+> **\` ୧🏗️୨ \` Personas interesadas en la creación de clubes**
+
+### ʚ —— ˗ ˏ NUESTROS CLUBES ˊˎ ˗ —— ɞ
 \`\`\`${clubsValues}\`\`\`
 
-### 📨 ¡INTERESADOS AL MD!
+**╭\`ɞ 📨\` Interesados:** ¡Al MD!
 `
 }
 
@@ -531,49 +566,66 @@ export async function refreshClubTemplate(client: Client): Promise<void> {
       ...countries.map(cc => fetchRankingMap(cc))
     ])
     const localByCountry = new Map(countries.map((cc, i) => [cc, localRankMaps[i]]))
-    const details: Array<{ value: string; trophies: number }> = []
+
+    type ClubRow = { name: string; trophies: number; reqText: string; rankText: string }
+    const rows: ClubRow[] = []
 
     for (const { tag, countryCode } of entries) {
       const clubTag = tag.replace(/^#+/, '')
       const club = await fetchTemplateClub(clubTag)
       if (!club) continue
 
-      const name = (club.name ?? tag).slice(0, 17).padEnd(17)
+      const name = (club.name ?? tag).slice(0, 15)
       const trophies = club.trophies ?? 0
-      const trophiesNum = trophies.toLocaleString('es').padStart(10)
-      const required = club.requiredTrophies ?? 0
-      const requiredText = formatTemplateRequired(required)
-
       const key = tag.trim().toUpperCase()
       const globalRank = globalRanks.get(key) ?? null
       const localRank = localByCountry.get(countryCode)?.get(key) ?? null
       const flag = countryCodeToFlag(countryCode)
-      const rankingText = formatTemplateRanks(globalRank, localRank, flag)
 
-      const line = `${name}${trophiesNum} 🏆  ${requiredText}  ${rankingText}`.trimEnd()
-
-      details.push({
-        value: line,
-        trophies
+      rows.push({
+        name,
+        trophies,
+        reqText: formatTemplateRequired(club.requiredTrophies ?? 0),
+        rankText: formatRanksText(globalRank, localRank, flag)
       })
     }
 
-    if (details.length === 0) {
+    if (rows.length === 0) {
       logger.warn('Plantilla clubes: sin datos válidos de clubes')
       return
     }
 
-    const formattedDate = formatTemplateTimestamp(new Date())
-    const members = `+${Math.floor(guild.memberCount / 100) * 100}`
-    const clubsValues = details
-      .sort((a, b) => b.trophies - a.trophies)
-      .map((item) => item.value)
+    rows.sort((a, b) => b.trophies - a.trophies)
+
+    // Cada club ocupa EXACTAMENTE 2 líneas y las 36 columnas de móvil se parten
+    // en DOS MITADES de 18: lo de la izquierda (nombre / +req copa) y lo de la
+    // derecha (trofeos+copa / lo del top) empiezan SIEMPRE en la col 18:
+    //
+    //   012345678901234567890123456789012   
+    //          1         2         3
+    //   123456789012345678901234567890123456
+    //   TS Old Comunity   3.804.727 🏆
+    //   +100k 🏆         #72 🇪🇸
+    //   └ izquierda (18) ┘└ derecha (18) ──┘
+    const HALF = 18
+
+    const clubsValues = rows
+      .map(r => {
+        const line1Left = r.name.slice(0, HALF)
+        const line1Right = `${r.trophies.toLocaleString('es').padStart(9)} 🏆`
+        const line2Left = `+${r.reqText.padStart(4)} 🏆`
+        const line2Right = r.rankText
+        return `${line1Left.padEnd(HALF)}${line1Right}\n${line2Left.padEnd(HALF)}${line2Right}`
+      })
       .join('\n')
 
-    await timestampMsg.edit(buildTimestampContent(formattedDate))
-    await promoMsg.edit(buildPromoContent(members, entries.length, clubsValues))
+    const formattedDate = formatTemplateTimestamp(new Date())
+    const members = `+${Math.floor(guild.memberCount / 100) * 100}`
 
-    logger.info('Plantilla clubes actualizada', { clubs: details.length })
+    await timestampMsg.edit(buildTimestampContent(formattedDate))
+    await promoMsg.edit(buildPromoContent(members, rows.length, clubsValues))
+
+    logger.info('Plantilla clubes actualizada', { clubs: rows.length })
   } catch (error) {
     logger.error('Plantilla clubes: error al actualizar', {
       message: error instanceof Error ? error.message : 'Unknown error'
