@@ -620,7 +620,13 @@ async function syncV2Channel(
 async function ensureStaffPanelChannel(client: Client, doc: AsociacionesPanelDocument): Promise<{ channel: { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } } | null, created: boolean }> {
   if (doc.staffPanelChannelId) {
     const channel = await client.channels.fetch(doc.staffPanelChannelId).catch(() => null)
-    if (channel?.isTextBased()) return { channel: channel as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, created: false }
+    if (channel?.isTextBased()) {
+      const textChannel = channel as TextChannel
+      if (textChannel.name !== STAFF_PANEL_NAME) {
+        await textChannel.setName(STAFF_PANEL_NAME, 'Corrección de nombre del panel de staff').catch(() => {})
+      }
+      return { channel: textChannel as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, created: false }
+    }
   }
 
 const guild = client.guilds.cache.get(botGuildId) ?? await client.guilds.fetch(botGuildId).catch(() => null)
