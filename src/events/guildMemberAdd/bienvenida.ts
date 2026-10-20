@@ -24,7 +24,7 @@ export default {
         .setURL(WELCOME_URL)
         .setDescription(
           `**¡Gracias por unirte a ${guild.name}!** ✅\n` +
-          '**Esperamos que disfrutes de tu estancia** 💙'
+          '**¡Esperamos que disfrutes de tu estancia!** 💙'
         )
         .setFooter({
           text: `Eres el miembro #${guild.memberCount} de ${guild.name}`,
