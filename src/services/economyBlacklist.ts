@@ -7,9 +7,15 @@ export const ECONOMY_BLACKLIST_LOG_CHANNEL_ID = '1561788417115955210'
 
 // Comandos de economía (UnbelievaBoat) que un usuario en la blacklist no debería usar
 export const ECONOMY_COMMANDS = new Set([
-  'work', 'slut', 'crime', 'rob', 'daily', 'collect', 'deposit', 'dep', 'withdraw', 'with',
-  'give-money', 'give', 'blackjack', 'bj', 'roulette', 'russian-roulette', 'rr', 'cock-fight',
-  'cf', 'slots', 'buy', 'sell', 'use', 'item', 'inventory', 'inv', 'store', 'shop'
+  // Ganar dinero
+  'work', 'slut', 'crime', 'rob', 'daily', 'collect', 'heist',
+  // Apuestas y juegos
+  'roulette', 'roul', 'russian-roulette', 'russianroulette', 'rr', 'blackjack', 'bj', 'cock-fight', 'cockfight', 'cf',
+  'slots', 'slot', 'crash', 'coinflip', 'cointoss', 'flip', 'dice', 'poker', 'lottery', 'bet', 'gamble', 'wheel',
+  // Banco y transferencias
+  'deposit', 'dep', 'withdraw', 'with', 'give-money', 'give', 'pay', 'transfer',
+  // Tienda e inventario
+  'buy', 'sell', 'use', 'item', 'inventory', 'inv', 'store', 'shop'
 ])
 
 const UNITS: Record<string, number> = {
