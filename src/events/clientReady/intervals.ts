@@ -3,11 +3,7 @@ import type { Event } from '../../types/events'
 import { runInterval } from '../../utils/interval'
 import { buildBrawlStarsEmbeds, refreshClubTemplate } from '../../services/clubs'
 import { getGuildConfig } from '../../services/guild'
-import {
-  BUSCAR_EQUIPO_CHANNEL_ID,
-  isBuscarEquipoSticky,
-  refreshBuscarEquipoSticky
-} from '../../services/buscarEquipo'
+import { BUSCAR_EQUIPO_CHANNEL_ID } from '../../services/buscarEquipo'
 import { expireBlacklist } from '../../services/economyBlacklist'
 import logger from '../../utils/logger'
 import {
@@ -63,7 +59,6 @@ export default {
         async function purgeChannels() {
           const config = await getGuildConfig()
           const now = Date.now()
-          const botUserId = client.user?.id
 
           for (const { channelId, intervalMinutes } of config.purgeChannels) {
             const last = lastPurgedAt.get(channelId) ?? 0
@@ -89,9 +84,9 @@ export default {
             })
             if (!messages || messages.size === 0) continue
 
-            // El sticky solo aplica a su canal; en el resto no se perdona nada por ser bot.
+            // El canal de buscar equipo nunca se purgea con este sistema.
             const deletable = messages.filter(
-              m => !m.pinned && (channelId !== BUSCAR_EQUIPO_CHANNEL_ID || !isBuscarEquipoSticky(m, botUserId))
+              m => !m.pinned && channelId !== BUSCAR_EQUIPO_CHANNEL_ID
             )
             if (deletable.size === 0) continue
 
@@ -112,10 +107,6 @@ export default {
                 requested: deletable.size,
                 deleted: deleted.size
               })
-            }
-
-            if (channelId === BUSCAR_EQUIPO_CHANNEL_ID) {
-              await refreshBuscarEquipoSticky(client)
             }
           }
         }
