@@ -48,6 +48,28 @@ export function cleanChannelName(rawName: string): string {
     .trim()
 }
 
+// Nombre display a partir del canal: "「❤」el-sotano-oficial" -> "El Sotano Oficial"
+export function titleFromChannelName(rawName: string): string {
+  return cleanChannelName(rawName)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1))
+    .join(' ')
+}
+
+// Nombre de canal en formato minúsculas-con-guiones: "El Sótano Oficial" -> "el-sotano-oficial"
+export function toChannelSlug(display: string): string {
+  return display
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

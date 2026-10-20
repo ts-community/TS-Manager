@@ -2,6 +2,7 @@ import type { Client, Message } from 'discord.js'
 import type { Event } from '../../types/events'
 import Asociacion from '../../models/Asociacion'
 import { addDays } from '../../services/asociaciones'
+import { scheduleRenewalPanelSync } from '../../services/asociacionesPanel'
 import logger from '../../utils/logger'
 
 // Tiempo mínimo entre plantillas de renovación en un mismo canal
@@ -27,6 +28,10 @@ export default {
       const now = new Date()
       const nextRenovationDate = addDays(now, asociacion.renovacionDias)
       const update = { lastRenovationDate: now, nextRenovationDate, renovacionAvisada: false }
+
+      // La fecha cambió, pero los paneles NO se reeditan por cada mensaje:
+      // se agrupan en una única sync lenta (30 min de debounce)
+      scheduleRenewalPanelSync(_client)
 
       // Reclamo atómico: solo el primer mensaje fuera del cooldown envía la plantilla,
       // así varios mensajes seguidos (o simultáneos) de la alianza no la duplican

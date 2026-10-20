@@ -13,6 +13,7 @@ export interface AsociacionConfig {
 }
 
 const asociacionSchema = new mongoose.Schema<AsociacionConfig>({
+  // Nombre para mostrar, con las mayúsculas correctas (ej: "El Sótano Oficial")
   servidor: { type: String, required: true, unique: true },
   representanteId: { type: String, required: false, default: null },
   renovacionDias: { type: Number, required: true },
