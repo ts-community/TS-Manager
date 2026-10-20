@@ -23,7 +23,13 @@ export default {
     if (!member.moderatable) return
 
     const now = Date.now()
-    const pings = (pingsByUser.get(member.id) ?? []).filter(time => now - time < WINDOW_MS)
+    let pings = (pingsByUser.get(member.id) ?? []).filter(time => now - time < WINDOW_MS)
+    
+    // Poda: removemos usuarios inactivos para evitar crecimiento infinito
+    if (pings.length === 0) {
+      pingsByUser.delete(member.id)
+    }
+
     pings.push(now)
     pingsByUser.set(member.id, pings)
 

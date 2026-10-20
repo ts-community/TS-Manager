@@ -7,7 +7,7 @@ import {
 } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
 import { ASOCIACIONES_COLOR, EMOJI, unix } from '../../services/asociaciones'
-import { buildAssociationDetailPayload } from '../../services/asociacionesPanel'
+import { buildAssociationDetailPayload } from '../../services/asociaciones'
 
 // Menú "por staff": CustomId: asoc-select-staff (UserSelect); eligible staff → sus asociaciones
 export default {

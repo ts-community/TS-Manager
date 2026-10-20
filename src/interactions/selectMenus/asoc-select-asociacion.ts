@@ -1,6 +1,6 @@
 import { PermissionFlagsBits, type StringSelectMenuInteraction } from 'discord.js'
 import Asociacion, { type AsociacionDocument } from '../../models/Asociacion'
-import { buildAssociationDetailPayload } from '../../services/asociacionesPanel'
+import { buildAssociationDetailPayload } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
 // Submenu "detallar una asociación" — CustomId: asoc-select-asociacion (StringSelect)

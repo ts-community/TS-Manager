@@ -1,8 +1,7 @@
 import { ChannelType, TextChannel, type ChannelSelectMenuInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
 import { addDays } from '../../services/asociaciones'
-import { schedulePanelsSync } from '../../services/asociacionesPanel'
-import { buildEditorPayload } from '../../services/asociacionesEditor'
+import { schedulePanelsSync, buildEditorPayload } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
 // Cambiar canal de la asociación — CustomId: asoc-edit-canal:{asociacionId}

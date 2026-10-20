@@ -179,36 +179,31 @@ async function verifyMember(member: GuildMember): Promise<void> {
   }
 }
 
-async function mainLoop(): Promise<void> {
+export async function scanNextTagMember(): Promise<void> {
   if (scanRunning || !guildRef) return
   scanRunning = true
-  logger.info('[TAG] Motor iniciado')
 
-  while (true) {
-    let member: GuildMember | null | undefined = null
+  let member: GuildMember | null | undefined = null
 
-    if (priorityQueue.length > 0 && guildRef) {
-      const id = priorityQueue.shift()!
-      member =
-        guildRef.members.cache.get(id) ??
-        (await guildRef.members.fetch(id).catch(() => null))
-    }
-
-    if (!member && guildRef) {
-      if (scanIndex >= membersArray.length) {
-        scanIndex = 0
-        membersArray = [...guildRef.members.cache.values()].filter((m) => !m.user.bot)
-        logger.info(`[TAG] Nuevo ciclo — ${membersArray.length} miembros`)
-      }
-
-      member = membersArray[scanIndex]
-      scanIndex++
-    }
-
-    if (member) await verifyMember(member)
-
-    await sleep(REQUEST_DELAY)
+  if (priorityQueue.length > 0 && guildRef) {
+    const id = priorityQueue.shift()!
+    member =
+      guildRef.members.cache.get(id) ??
+      (await guildRef.members.fetch(id).catch(() => null))
   }
+
+  if (!member && guildRef) {
+    if (scanIndex >= membersArray.length) {
+      scanIndex = 0
+      membersArray = [...guildRef.members.cache.values()].filter((m) => !m.user.bot)
+    }
+
+    member = membersArray[scanIndex]
+    scanIndex++
+  }
+
+  if (member) await verifyMember(member)
+  scanRunning = false
 }
 
 function enqueuePriority(id: string): void {
@@ -262,6 +257,4 @@ export async function startTagRoleManager(client: Client): Promise<void> {
     if (member.guild.id !== guildRef?.id) return
     membersArray = membersArray.filter((m) => m.id !== member.id)
   })
-
-  void mainLoop()
 }

@@ -1,6 +1,6 @@
 import { PermissionFlagsBits, type ButtonInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
-import { buildAssociationDetailPayload } from '../../services/asociacionesPanel'
+import { buildAssociationDetailPayload } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
 // CustomId: asoc-btn-ver:{asociacionId} — vuelve a la tarjeta de detalle

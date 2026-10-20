@@ -1,7 +1,6 @@
 import type { UserSelectMenuInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
-import { schedulePanelsSync } from '../../services/asociacionesPanel'
-import { buildEditorPayload } from '../../services/asociacionesEditor'
+import { schedulePanelsSync, buildEditorPayload } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
 // CustomId: asoc-edit-usuario:{campo}:{asociacionId} — campo: representante | staff-encargado

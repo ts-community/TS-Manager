@@ -1,117 +1,26 @@
-import { ChannelType } from 'discord.js'
-import type { Event } from '../../types/events'
+import type { Event } from '#types/events'
 import { runInterval } from '../../utils/interval'
-import { buildBrawlStarsEmbeds, refreshClubTemplate } from '../../services/clubs'
-import { getGuildConfig } from '../../services/guild'
-import { BUSCAR_EQUIPO_CHANNEL_ID } from '../../services/buscarEquipo'
 import { expireBlacklist } from '../../services/economyBlacklist'
-import logger from '../../utils/logger'
-import {
-  brawlStarsChannelId,
-  brawlStarsMessageId
-} from '../../config/env'
+import { refreshBrawlStarsEmbed, refreshClubTemplate } from '../../services/clubs'
+import { runChannelPurges } from '../../services/purge'
+import { checkBumpReminders } from '../../services/bumps'
+import { scanNextTagMember } from '../../services/tagRole'
+import { checkDueAsociaciones } from '../../services/asociaciones'
 
-const lastPurgedAt = new Map<string, number>()
+const SECOND = 1000
+const MINUTE = 60 * SECOND
 
+// Todas las tareas periódicas del bot viven en sus módulos y se registran aquí.
 export default {
   once: true,
 
-  async execute(client) {
-    runInterval(
-      [
-        async function expireEconomyBlacklist() {
-          await expireBlacklist(client)
-        }
-      ],
-      1000 * 30
-    )
-
-    runInterval(
-      [
-        async function refreshBrawlStarsEmbed() {
-          if (!brawlStarsChannelId || !brawlStarsMessageId) return
-
-          const embeds = await buildBrawlStarsEmbeds(client)
-          if (!embeds) return
-
-          const channel = await client.channels.fetch(brawlStarsChannelId)
-          if (!channel || channel.type !== ChannelType.GuildText) return
-
-          const message = await channel.messages.fetch(brawlStarsMessageId)
-          await message.edit({ embeds })
-        }
-      ],
-      1000 * 20
-    )
-
-    // Plantilla de promoción de clubes (legacy): edita los 2 mensajes con datos live.
-    runInterval(
-      [
-        async function refreshPlantillaClubes() {
-          await refreshClubTemplate(client)
-        }
-      ],
-      1000 * 60 * 15
-    )
-
-    runInterval(
-      [
-        async function purgeChannels() {
-          const config = await getGuildConfig()
-          const now = Date.now()
-
-          for (const { channelId, intervalMinutes } of config.purgeChannels) {
-            const last = lastPurgedAt.get(channelId) ?? 0
-            if (now - last < intervalMinutes * 60_000) continue
-
-            lastPurgedAt.set(channelId, now)
-
-            const channel = await client.channels.fetch(channelId).catch((error) => {
-              logger.warn('Purge: no se pudo obtener el canal', {
-                channelId,
-                reason: error instanceof Error ? error.message : String(error)
-              })
-              return null
-            })
-            if (!channel || !channel.isTextBased() || channel.isDMBased()) continue
-
-            const messages = await channel.messages.fetch({ limit: 100 }).catch((error) => {
-              logger.warn('Purge: no se pudieron leer mensajes', {
-                channelId,
-                reason: error instanceof Error ? error.message : String(error)
-              })
-              return null
-            })
-            if (!messages || messages.size === 0) continue
-
-            // El canal de buscar equipo nunca se purgea con este sistema.
-            const deletable = messages.filter(
-              m => !m.pinned && channelId !== BUSCAR_EQUIPO_CHANNEL_ID
-            )
-            if (deletable.size === 0) continue
-
-            const deleted = await channel.bulkDelete(deletable, true).catch((error) => {
-              logger.warn('Purge: bulkDelete falló (revisa permiso Gestionar mensajes)', {
-                channelId,
-                count: deletable.size,
-                reason: error instanceof Error ? error.message : String(error)
-              })
-              return null
-            })
-            if (!deleted) continue
-
-            // bulkDelete con filterOld=true ignora mensajes de +14 días: se avisa, no se rompe nada.
-            if (deleted.size < deletable.size) {
-              logger.warn('Purge: quedaron mensajes sin borrar (límite 14 días de Discord)', {
-                channelId,
-                requested: deletable.size,
-                deleted: deleted.size
-              })
-            }
-          }
-        }
-      ],
-      1000 * 60
-    )
+  async execute(client: import('discord.js').Client) {
+    runInterval([expireBlacklist.bind(null, client)], 30 * SECOND)
+    runInterval([refreshBrawlStarsEmbed.bind(null, client)], 20 * SECOND)
+    runInterval([refreshClubTemplate.bind(null, client)], 15 * MINUTE)
+    runInterval([runChannelPurges.bind(null, client)], MINUTE)
+    runInterval([checkBumpReminders.bind(null, client)], MINUTE)
+    runInterval([checkDueAsociaciones.bind(null, client)], 30 * MINUTE)
+    runInterval([scanNextTagMember], 800)
   }
 } satisfies Event<'clientReady'>

@@ -20,5 +20,6 @@ const economyBlacklistSchema = new mongoose.Schema<EconomyBlacklistEntry>({
 })
 
 economyBlacklistSchema.index({ guildId: 1, userId: 1 }, { unique: true })
+economyBlacklistSchema.index({ expiresAt: 1 })
 
 export default mongoose.model('EconomyBlacklist', economyBlacklistSchema)

@@ -18,18 +18,20 @@ import {
   fetchStaffGroups,
   renderStaffCenter,
   schedulePanelsSync
-} from '../../../services/asociacionesPanel'
-import { buildEditorPayload } from '../../../services/asociacionesEditor'
+} from '../../../services/asociaciones'
 import {
   ASOCIACIONES_CATEGORY_ID,
   EMOJI,
   addDays,
+  buildEditorPayload,
   greenEmbed,
+  logger,
   sendAsociacionesLog,
   servidorFilter,
   titleFromChannelName,
   toChannelSlug,
-  unix
+  unix,
+  Container
 } from '../../../services/asociaciones'
 
 const ELIMINAR_MENU_ID = 'asoc-select-eliminar'
@@ -204,19 +206,43 @@ export default {
     }
 
     /* ------------------- lista ------------------- */
-    if (sub === 'lista') {
-      if (!await hasPermission(interaction, 'staff')) {
-        return void reply('**Acceso Denegado**: la lista completa es solo para el staff.')
-      }
-      const groups = await fetchStaffGroups(interaction.client)
-      const containers = renderStaffCenter(groups)
-      if (!groups.length) return void reply('No hay asociaciones registradas todavía.')
+if (sub === 'lista') {
+    if (!await hasPermission(interaction, 'staff')) {
+      return void reply('**Acceso Denegado**: la lista completa es solo para el staff.')
+    }
+    const groups = await fetchStaffGroups(interaction.client)
+    const containers = renderStaffCenter(groups)
+    if (!groups.length) return void reply('No hay asociaciones registradas todavía.')
 
-      return void interaction.editReply({
-        components: containers as never,
+    const MAX_COMPONENTS_PER_MESSAGE = 10
+    const chunks: Container[][] = []
+    for (let i = 0; i < containers.length; i += MAX_COMPONENTS_PER_MESSAGE) {
+      chunks.push(containers.slice(i, i + MAX_COMPONENTS_PER_MESSAGE))
+    }
+
+    try {
+      await interaction.editReply({
+        components: chunks[0],
         flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
       } as never)
+      for (let i = 1; i < chunks.length; i++) {
+        await interaction.followUp({
+          components: chunks[i],
+          flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+        } as never).catch(() => {})
+      }
+    } catch (error) {
+      logger.error('Asociaciones: error enviando lista de staff', {
+        command: 'asociaciones lista',
+        user: interaction.user.tag,
+        message: error instanceof Error ? error.message : 'Unknown error'
+      })
+      await interaction.followUp({
+        content: '⚠️ Ocurrió un error al generar la lista de asociaciones.',
+        flags: MessageFlags.Ephemeral
+      }).catch(() => {})
     }
+  }
 
     const authorized = await hasPermission(interaction, 'staff')
     if (!authorized) {

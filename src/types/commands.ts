@@ -13,6 +13,17 @@ import type {
 export type CommandPermission = 'admin' | 'staff' | 'member'
 export type CommandCategory = 'general' // Here you can add more categories like 'moderation', 'fun', etc.
 
+export type CommandType = 'prefix' | 'slash' | 'contextMenu'
+export interface LoadedCommand {
+  fileName: string
+  command: any
+  permission: CommandPermission
+}
+export interface CommandLoadError {
+  file: string
+  reason: string
+}
+
 export interface BaseCommand {
   category?: CommandCategory
   cooldown?: number

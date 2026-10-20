@@ -26,4 +26,10 @@ const asociacionSchema = new mongoose.Schema<AsociacionConfig>({
 })
 
 export type AsociacionDocument = mongoose.HydratedDocument<AsociacionConfig>
+
+asociacionSchema.index({ canalId: 1 })
+asociacionSchema.index({ staffEncargadoId: 1 })
+asociacionSchema.index({ representanteId: 1 })
+asociacionSchema.index({ nextRenovationDate: 1, renovacionAvisada: 1 })
+
 export default mongoose.model('Asociacion', asociacionSchema)

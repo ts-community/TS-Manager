@@ -2,15 +2,11 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { Events, Client } from 'discord.js'
+import type { Event, EventLoadError } from '../types/events'
 import logger from '../utils/logger'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-
-interface LoadError {
-  file: string
-  reason: string
-}
 
 export default async (client: Client): Promise<number> => {
   const baseDir = path.join(__dirname, '../events')
@@ -21,7 +17,7 @@ export default async (client: Client): Promise<number> => {
   let total = 0
   let loaded = 0
   const folderErrors: string[] = []
-  const errors: LoadError[] = []
+  const errors: EventLoadError[] = []
 
   await Promise.all(eventTypes.map(async type => {
     const eventKey = (Object.keys(Events) as Array<keyof typeof Events>).find(

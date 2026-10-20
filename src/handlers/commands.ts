@@ -6,7 +6,10 @@ import {
   PrefixCommandInstance,
   SlashCommandInstance,
   ContextMenuCommandInstance,
-  CommandPermission
+  CommandPermission,
+  CommandType,
+  LoadedCommand,
+  CommandLoadError
 } from '../types/commands'
 import { guildId } from '../config/env'
 import logger from '../utils/logger'
@@ -15,10 +18,6 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const permissionFolders: CommandPermission[] = ['admin', 'staff', 'member']
-
-type CommandType = 'prefix' | 'slash' | 'contextMenu'
-interface LoadedCommand { fileName: string; command: any; permission: CommandPermission }
-interface LoadError { file: string; reason: string }
 
 export default async (client: Client): Promise<void> => {
   const prefix = await loadCommands('prefix')
@@ -59,7 +58,7 @@ async function loadCommands(type: CommandType): Promise<LoadedCommand[]> {
   if (!fs.existsSync(baseDir)) { logger.warn(`No ${type} commands found`); return [] }
 
   const results: LoadedCommand[] = []
-  const errors: LoadError[] = []
+  const errors: CommandLoadError[] = []
   const folders = getFolders(baseDir).filter(f => permissionFolders.includes(f as CommandPermission))
   const total = folders.reduce((acc, f) => acc + getCommandFiles(path.join(baseDir, f)).length, 0)
   let loaded = 0

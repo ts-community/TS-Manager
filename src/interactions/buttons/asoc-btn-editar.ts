@@ -1,6 +1,6 @@
 import type { ButtonInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
-import { buildEditorPayload } from '../../services/asociacionesEditor'
+import { buildEditorPayload } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
 // CustomId: asoc-btn-editar:{asociacionId} — abre el editor de campos (solo staff)

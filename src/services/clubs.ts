@@ -1,5 +1,5 @@
 import { ChannelType, EmbedBuilder, type Client } from 'discord.js'
-import { brawlStarsApiToken, guildId } from '../config/env'
+import { brawlStarsApiToken, brawlStarsChannelId, brawlStarsMessageId, guildId } from '../config/env'
 import { formatCountry, getCountryFlag, isSupportedCountryCode, normalizeCountryInput } from '../config/countries'
 import { getGuildConfig } from './guild'
 import logger from '../utils/logger'
@@ -407,6 +407,20 @@ export async function buildBrawlStarsEmbeds(client: Client): Promise<EmbedBuilde
     createSummaryEmbed(validClubs, thumbnailUrl),
     createClubListEmbed(validClubs, updatedAt)
   ]
+}
+
+/** Edita el mensaje fijo del canal de Brawl Stars con los embeds en vivo. */
+export async function refreshBrawlStarsEmbed(client: Client): Promise<void> {
+  if (!brawlStarsChannelId || !brawlStarsMessageId) return
+
+  const embeds = await buildBrawlStarsEmbeds(client)
+  if (!embeds) return
+
+  const channel = await client.channels.fetch(brawlStarsChannelId)
+  if (!channel || channel.type !== ChannelType.GuildText) return
+
+  const message = await channel.messages.fetch(brawlStarsMessageId)
+  await message.edit({ embeds })
 }
 
 // --- Plantilla de promoción de clubes (texto para copiar/pegar) ---

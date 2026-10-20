@@ -1,11 +1,7 @@
+import type { IntervalTask } from '../types/intervals'
 import logger from './logger'
 
-type IntervalTask = () => Promise<void> | void
-
-export async function runInterval(
-  tasks: IntervalTask[],
-  ms: number,
-): Promise<void> {
+export function runInterval(tasks: IntervalTask[], ms: number): void {
   const run = async (): Promise<void> => {
     try {
       const results = await Promise.allSettled(tasks.map(fn => fn()))
@@ -28,9 +24,9 @@ export async function runInterval(
           : String(unexpected)
       })
     } finally {
-      setTimeout(run, ms)
+      setTimeout(run, ms).unref?.()
     }
   }
 
-  run()
+  void run()
 }

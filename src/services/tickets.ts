@@ -758,7 +758,7 @@ function renderMessageText(message: Message): string {
 async function fetchChannelMessages(channel: TextBasedChannel): Promise<{ messages: Message[]; truncated: boolean }> {
   const all: Message[] = []
   let before: string | undefined
-  for (let page = 0; page < 50; page++) {
+  for (let page = 0; page < 10; page++) {
     const batch = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) }).catch(() => null)
     if (!batch || batch.size === 0) return { messages: all, truncated: false }
     const sorted = [...batch.values()].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
@@ -948,6 +948,7 @@ export async function requestServiceTicketClose(interaction: ButtonInteraction |
     components: [closeConfirmContainer()]
   })
   pendingClose.set(channel.id, confirmMessage.id)
+  setTimeout(() => pendingClose.delete(channel.id), 30_000)
   await interaction.reply({ content: 'Se ha enviado la solicitud de cierre al canal.', ephemeral: true })
 }
 

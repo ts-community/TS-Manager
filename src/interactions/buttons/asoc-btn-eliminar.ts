@@ -1,6 +1,6 @@
 import type { ButtonInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
-import { buildRemoveConfirmPayload } from '../../services/asociacionesEditor'
+import { buildRemoveConfirmPayload } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
 // CustomId: asoc-btn-eliminar:{asociacionId} — crea mensaje público de confirmación (solo admins)

@@ -1,22 +1,11 @@
-import type { Event } from '../../types/events'
-import { runInterval } from '../../utils/interval'
-import { checkDueAsociaciones } from '../../services/asociaciones'
-import { schedulePanelsSync } from '../../services/asociacionesPanel'
+import type { Event } from '#types/events'
+import { schedulePanelsSync } from '../../services/asociaciones'
 
 export default {
   once: true,
 
-  async execute(client) {
-    // Sincroniza los paneles al arrancar (con debounce) y reordena la categoría si hace falta
+  async execute(client: import('discord.js').Client) {
+    // Sincroniza los paneles al arrancar (con debounce)
     schedulePanelsSync(client, 15_000)
-
-    runInterval(
-      [
-        async function checkAsociacionesRenovacion() {
-          await checkDueAsociaciones(client)
-        }
-      ],
-      1000 * 60 * 30
-    )
   }
 } satisfies Event<'clientReady'>

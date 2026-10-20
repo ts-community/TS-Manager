@@ -1,7 +1,6 @@
 import type { ModalSubmitInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
-import { schedulePanelsSync } from '../../services/asociacionesPanel'
-import { buildEditorPayload } from '../../services/asociacionesEditor'
+import { schedulePanelsSync, buildEditorPayload } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
 // CustomId: asoc-modal-nombre:{asociacionId}

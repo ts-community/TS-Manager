@@ -1,6 +1,6 @@
 import { type StringSelectMenuInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
-import { buildRemoveConfirmPayload } from '../../services/asociacionesEditor'
+import { buildRemoveConfirmPayload } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
 // Confirmación de eliminación (solo admins) — CustomId: asoc-select-eliminar

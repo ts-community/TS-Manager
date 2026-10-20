@@ -1,14 +1,16 @@
 import mongoose from 'mongoose'
-import { ActivityType } from 'discord.js'
-import type { Event } from '../../types/events'
+import type { Event } from '#types/events'
+import { Client } from 'discord.js'
 import { mongoURL } from '../../config/env'
 import logger from '../../utils/logger'
 import { publishServiceThreads } from '../../services/services'
+import { schedulePanelsSync } from '../../services/asociaciones'
 
 export default {
   once: true,
   
-  async execute(client) {
+  async execute(client: Client) {
+    if (!client.user) return
     logger.success(`Logged in as ${client.user.tag}`)
 
     try {
@@ -27,13 +29,19 @@ export default {
       logger.info('Looking for file changes...\n')
     }
 
-    const activities = [
-      'En desarrollo'
+    // Estado profesional del bot
+    const actividades = [
+      '.gg/tscomunity',
+      '#TSComunity',
     ]
 
     setInterval(() => {
-      const status = activities[Math.floor(Math.random() * activities.length)]
-      client.user.setActivity({ name: status, type: ActivityType.Custom })
-    }, 1000 * 60)
+      if (!client.user) return
+      const status = actividades[Math.floor(Math.random() * actividades.length)]
+      client.user.setActivity({ name: status, type: 3 })
+    }, 1000 * 60 * 15)
+
+    // Sincroniza los paneles al arrancar (con debounce) y reordena la categoría si hace falta
+    schedulePanelsSync(client, 15_000)
   }
 } satisfies Event<'clientReady'>

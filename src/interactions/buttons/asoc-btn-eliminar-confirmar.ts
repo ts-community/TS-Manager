@@ -1,6 +1,6 @@
 import { PermissionFlagsBits, type ButtonInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
-import { schedulePanelsSync } from '../../services/asociacionesPanel'
+import { schedulePanelsSync } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
 // CustomId: asoc-btn-eliminar-confirmar:{asociacionId} — solo admins

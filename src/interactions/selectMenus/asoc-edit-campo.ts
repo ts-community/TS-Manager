@@ -8,8 +8,7 @@ import {
   type StringSelectMenuInteraction
 } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
-import { schedulePanelsSync } from '../../services/asociacionesPanel'
-import { buildEditorPayload } from '../../services/asociacionesEditor'
+import { schedulePanelsSync, buildEditorPayload } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
 // Editor de campos de una asociación (solo staff). CustomId: asoc-edit-campo:{asociacionId}
