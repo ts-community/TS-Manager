@@ -4,8 +4,8 @@ import { expireBlacklist } from '../../services/economyBlacklist'
 import { refreshBrawlStarsEmbed, refreshClubTemplate } from '../../services/clubs'
 import { runChannelPurges } from '../../services/purge'
 import { checkBumpReminders } from '../../services/bumps'
-import { scanNextTagMember } from '../../services/tagRole'
-import { checkDueAsociaciones } from '../../services/asociaciones'
+import { scanNextTagMember, startTagRoleManager } from '../../services/tagRole'
+import { checkDueAsociaciones, schedulePanelsSync } from '../../services/asociaciones'
 
 const SECOND = 1000
 const MINUTE = 60 * SECOND
@@ -15,6 +15,9 @@ export default {
   once: true,
 
   async execute(client: import('discord.js').Client) {
+    await startTagRoleManager(client)
+    // Sincroniza los paneles al arrancar (con debounce)
+    schedulePanelsSync(client, 15_000)
     runInterval([expireBlacklist.bind(null, client)], 30 * SECOND)
     runInterval([refreshBrawlStarsEmbed.bind(null, client)], 20 * SECOND)
     runInterval([refreshClubTemplate.bind(null, client)], 15 * MINUTE)

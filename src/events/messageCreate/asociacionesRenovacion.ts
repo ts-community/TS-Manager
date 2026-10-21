@@ -1,8 +1,7 @@
 import type { Client, Message } from 'discord.js'
 import type { Event } from '../../types/events'
 import Asociacion from '../../models/Asociacion'
-import { addDays } from '../../services/asociaciones'
-import { scheduleRenewalPanelSync } from '../../services/asociaciones-sync'
+import { addDays, scheduleRenewalPanelSync } from '../../services/asociaciones'
 import logger from '../../utils/logger'
 
 // Tiempo mínimo entre plantillas de renovación en un mismo canal

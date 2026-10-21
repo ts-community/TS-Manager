@@ -4,7 +4,6 @@ import { Client } from 'discord.js'
 import { mongoURL } from '../../config/env'
 import logger from '../../utils/logger'
 import { publishServiceThreads } from '../../services/services'
-import { schedulePanelsSync } from '../../services/asociaciones-sync'
 
 export default {
   once: true,
@@ -40,8 +39,5 @@ export default {
       const status = actividades[Math.floor(Math.random() * actividades.length)]
       client.user.setActivity({ name: status, type: 3 })
     }, 1000 * 60 * 15)
-
-    // Sincroniza los paneles al arrancar (con debounce) y reordena la categoría si hace falta
-    schedulePanelsSync(client, 15_000)
   }
 } satisfies Event<'clientReady'>

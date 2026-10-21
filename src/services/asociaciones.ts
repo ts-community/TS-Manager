@@ -338,7 +338,7 @@ export function buildAssociationDetailPayload(
 // Canal/hilo donde vive el panel "en vivo" del estado de asociaciones
 export const ASOCIACIONES_LIVE_THREAD_ID = '1562220631783903382'
 // Nombre del canal privado del staff (posicionado en la categoría de asociaciones)
-export const STAFF_PANEL_NAME = '₊୧ panel-asociaciones ୨₊'
+export const STAFF_PANEL_NAME = '﹏︿panel-asociaciones︿﹏'
 // Iconos decorativos para los canales de staff (prefijo y sufijo) - formato compatible con Discord
 export const STAFF_CHANNEL_PREFIX = '﹏︿'
 export const STAFF_CHANNEL_SUFFIX = '︿﹏'
@@ -584,10 +584,51 @@ function containerDigest(container: Container): string {
   return JSON.stringify(container.toJSON())
 }
 
+// Detecta si un mensaje ya fue enviado con Components V2 (igual que en el bot viejo)
+function isV2(message: unknown): boolean {
+  const flags = BigInt((message as { flags?: number | bigint } | null)?.flags ?? 0)
+  return (flags & BigInt(MessageFlags.IsComponentsV2)) !== 0n
+}
+
+// Compara la estructura de los componentes: si Discord la cambió/rompió hay que recrer & sustituir
+function compareMessageStructure(oldMessage: unknown, containers: Container[]): boolean {
+  const msg = oldMessage as { components?: unknown[] } | null
+  if (!msg?.components || !Array.isArray(msg.components)) return false
+  const expected = containers[0].toJSON().components as { type: number }[]
+  if (msg.components.length !== expected.length) return false
+  return msg.components.every(
+    (c, index) => (c as { type?: number }).type === expected[index].type
+  )
+}
+
+// Borra los mensajes viejos del bot en un canal (usado al rehacer el panel)
+async function deleteBotMessages(channel: { messages: { delete: (id: string) => Promise<unknown> } }, ids: string[]): Promise<void> {
+  for (const id of ids) {
+    await channel.messages.delete(id).catch(() => {})
+  }
+}
+
+// Resumen compacto en embed clásico (fallback si falla Components V2)
+function createSummaryEmbed(groups: StaffGroup[]): EmbedBuilder {
+  const total = groups.reduce((sum, g) => sum + g.items.length, 0)
+  const sections = groups.map(g => {
+    const label = g.staffId ? g.nombre : 'Sin asignar'
+    const lines = g.items
+      .map(i => `${i.emoji} **${i.servidor}** — <t:${unix(i.nextRenovationDate)}:R>`)
+      .join('\n') || '*Nada por ahora.*'
+    return `${g.staffId ? EMOJI.staff : '💤'} **${label}** (${g.items.length})\n${lines}`
+  }).join('\n') || '*Sin asociaciones registradas.*'
+  return new EmbedBuilder()
+    .setColor(ASOCIACIONES_PANEL_COLOR)
+    .setTitle(`☕ Lista de Asociaciones (${total})`)
+    .setDescription(sections)
+}
+
 async function syncMessages(
   channel: { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } },
   containers: Container[],
-  ids: string[]
+  ids: string[],
+  fallback?: EmbedBuilder[]
 ): Promise<string[]> {
   const nextIds: string[] = []
 
@@ -599,25 +640,40 @@ async function syncMessages(
     if (contentCache.get(cacheKey) === digest && existingId) continue
 
     const payload = { flags: MessageFlags.IsComponentsV2, components: [containers[i]] }
-    try {
-      if (existingId) {
-        const message = await channel.messages.fetch(existingId) as unknown as { edit: (p: unknown) => Promise<unknown> }
-        await message.edit(payload)
-        contentCache.set(cacheKey, digest)
-        continue
+    let done = false
+    if (existingId) {
+      const message = await channel.messages.fetch(existingId).catch(() => null)
+      if (message) {
+        // Un mensaje no-V2 o con estructura rota no se puede editar al nuevo formato: se borra y se recrea
+        if (isV2(message) && compareMessageStructure(message, containers)) {
+          try {
+            await (message as unknown as { edit: (p: unknown) => Promise<unknown> }).edit(payload)
+            contentCache.set(cacheKey, digest)
+            done = true
+          } catch {
+            contentCache.delete(cacheKey)
+          }
+        } else {
+          await deleteBotMessages(channel, [existingId])
+          contentCache.delete(cacheKey)
+        }
       }
-    } catch {
-      contentCache.delete(cacheKey)
     }
 
-    try {
-      const created = await channel.messages.send(payload)
-      nextIds[i] = created.id
-      contentCache.set(cacheKey, digest)
-    } catch (error) {
-      logger.error('AsociacionesPanel: no se pudo enviar el mensaje del panel', {
-        message: error instanceof Error ? error.message : 'Unknown error'
-      })
+    if (!done) {
+      try {
+        const created = await channel.messages.send(payload)
+        nextIds[i] = created.id
+        contentCache.set(cacheKey, digest)
+      } catch (error) {
+        logger.error('AsociacionesPanel: no se pudo enviar el mensaje del panel', {
+          message: error instanceof Error ? error.message : 'Unknown error'
+        })
+        if (fallback?.length) {
+          // Fallback del bot viejo: envía un embed clásico si el canal no acepta Components V2
+          await (channel as unknown as { send: (p: { embeds: EmbedBuilder[] }) => Promise<unknown> }).send({ embeds: fallback }).catch(() => {})
+        }
+      }
     }
   }
 
@@ -633,9 +689,10 @@ async function syncMessages(
 async function syncV2Channel(
   channel: { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } },
   containers: Container[],
-  currentIds: string[]
+  currentIds: string[],
+  fallback?: EmbedBuilder[]
 ): Promise<string[]> {
-  return syncMessages(channel, containers, currentIds)
+  return syncMessages(channel, containers, currentIds, fallback)
 }
 
 async function ensureStaffPanelChannel(client: Client, doc: AsociacionesPanelDocument): Promise<{ channel: { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } } | null, created: boolean }> {
@@ -681,12 +738,31 @@ async function resolveGuild(client: Client) {
   return client.guilds.cache.get(botGuildId) ?? await client.guilds.fetch(botGuildId).catch(() => null)
 }
 
+// Busca en la categoría un canal de staff ya existente con el mismo nombre (evita duplicados como el bot viejo)
+async function findExistingStaffChannel(
+  guild: NonNullable<Awaited<ReturnType<typeof resolveGuild>>>,
+  staffDisplayName: string
+): Promise<TextChannel | null> {
+  const category = await guild.channels.fetch(ASOCIACIONES_CATEGORY_ID).catch(() => null)
+  if (!category || category.type !== ChannelType.GuildCategory) return null
+  const target = normalizeDiscordChannelName(staffChannelName(staffDisplayName))
+  const children = guild.channels.cache.filter(c => c.parentId === category.id) as unknown as Map<string, { id: string, type: number, name: string }>
+  for (const child of children.values()) {
+    if (child.type !== ChannelType.GuildText) continue
+    if (normalizeDiscordChannelName(child.name) === target) {
+      return await guild.channels.fetch(child.id).catch(() => null) as unknown as TextChannel
+    }
+  }
+  return null
+}
+
 async function ensureStaffChannel(
   client: Client,
   guild: NonNullable<Awaited<ReturnType<typeof resolveGuild>>>,
   doc: AsociacionesPanelDocument,
   staffId: string,
-  desiredName: string
+  desiredName: string,
+  staffDisplayName: string
 ): Promise<{ channelId: string, messageIdFirst?: string, created: boolean }> {
   const entry = doc.staffChannels.find(e => e.staffId === staffId)
 
@@ -729,6 +805,20 @@ async function ensureStaffChannel(
     }
   }
 
+  // El bot viejo adoptaba un canal huérfano con el mismo nombre en lugar de crear otro
+  const adopted = await findExistingStaffChannel(guild, staffDisplayName)
+  if (adopted) {
+    const currentParent = adopted.parentId
+    if (currentParent !== category.id) await adopted.setParent(category.id).catch(() => {})
+    if (adopted.name !== desiredName) await adopted.setName(desiredName, 'Sincronización del panel de staff').catch(() => {})
+    await adopted.permissionOverwrites.set(overwrites as never).catch(() => {})
+    doc.staffChannels.push({ staffId, channelId: adopted.id, messageIds: [] })
+    doc.markModified('staffChannels')
+    await doc.save()
+    logger.info('AsociacionesPanel: canal de staff existente adoptado', { channelId: adopted.id, staffId })
+    return { channelId: adopted.id, created: true }
+  }
+
   const created = await guild.channels.create({
     name: desiredName,
     type: ChannelType.GuildText,
@@ -759,6 +849,31 @@ async function pruneStaffChannels(client: Client, doc: AsociacionesPanelDocument
   if (stale.length) {
     doc.markModified('staffChannels')
     await doc.save()
+  }
+
+  if (!guild) return
+  const managedIds = new Set<string>([doc.staffPanelChannelId, ...doc.staffChannels.map(e => e.channelId)].filter(Boolean))
+  await cleanupObsoleteStaffChannels(guild, managedIds)
+}
+
+async function cleanupObsoleteStaffChannels(
+  guild: NonNullable<Awaited<ReturnType<typeof resolveGuild>>>,
+  managedIds: Set<string>
+): Promise<void> {
+  const category = await guild.channels.fetch(ASOCIACIONES_CATEGORY_ID).catch(() => null)
+  if (!category || category.type !== ChannelType.GuildCategory) return
+  const orphanPattern = new RegExp(`^${escapeRegExp(STAFF_CHANNEL_PREFIX)}.+${escapeRegExp(STAFF_CHANNEL_SUFFIX)}$`)
+  const children = guild.channels.cache.filter(c => c.parentId === category.id) as unknown as Map<string, { id: string, type: number, name: string, deletable?: boolean }>
+  for (const child of children.values()) {
+    if (child.type !== ChannelType.GuildText) continue
+    if (managedIds.has(child.id)) continue
+    if (!orphanPattern.test(child.name)) continue
+    const fetched = await guild.channels.fetch(child.id).catch(() => null)
+    if (!fetched) continue
+    const textChannel = fetched as unknown as { deletable: boolean, delete: (r?: string) => Promise<unknown> }
+    if (!textChannel.deletable) continue
+    await textChannel.delete('Canal de staff huérfano').catch(() => {})
+    logger.info('AsociacionesPanel: canal de staff huérfano eliminado', { channelId: child.id, name: child.name })
   }
 }
 
@@ -882,7 +997,7 @@ async function syncLiveThread(client: Client, groups: StaffGroup[]): Promise<voi
 
   const doc = await loadPanelConfig()
   const containers = renderStaffCenter(groups)
-  const ids = await syncV2Channel(thread as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, containers, doc.liveMessageIds ?? [])
+  const ids = await syncV2Channel(thread as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, containers, doc.liveMessageIds ?? [], [createSummaryEmbed(groups)])
   doc.liveMessageIds = ids
   doc.markModified('liveMessageIds')
   await doc.save()
@@ -893,7 +1008,7 @@ async function syncStaffPanel(client: Client, doc: AsociacionesPanelDocument, gr
   if (!channel) return
 
   const containers = renderStaffCenter(groups)
-  const ids = await syncV2Channel(channel, containers, doc.staffPanelMessageIds ?? [])
+  const ids = await syncV2Channel(channel, containers, doc.staffPanelMessageIds ?? [], [createSummaryEmbed(groups)])
   if (doc.staffPanelMessageIds!.join(',') !== ids.join(',')) {
     doc.staffPanelMessageIds = ids
     doc.markModified('staffPanelMessageIds')
@@ -914,7 +1029,7 @@ async function syncPerStaffChannels(client: Client, doc: AsociacionesPanelDocume
 
     let entry = doc.staffChannels.find(e => e.staffId === group.staffId)
     if (!entry) {
-      await ensureStaffChannel(client, guild, doc, group.staffId!, desiredName)
+      await ensureStaffChannel(client, guild, doc, group.staffId!, desiredName, group.nombre)
       entry = doc.staffChannels.find(e => e.staffId === group.staffId)
       if (!entry) {
         logger.warn('AsociacionesPanel: no se pudo crear el canal de staff', { staffId: group.staffId })
@@ -934,7 +1049,7 @@ async function syncPerStaffChannels(client: Client, doc: AsociacionesPanelDocume
       title: `## ☕ Asociaciones de ${group.nombre} (${group.items.length})`,
       hideGroupHeaders: true
     })
-    const ids = await syncV2Channel(textChannel as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, containers, entry.messageIds ?? [])
+    const ids = await syncV2Channel(textChannel as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, containers, entry.messageIds ?? [], [createSummaryEmbed([group])])
     if (entry.messageIds?.join(',') !== ids.join(',')) {
       entry.messageIds = ids
       doc.markModified('staffChannels')
