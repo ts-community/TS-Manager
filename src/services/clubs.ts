@@ -446,15 +446,16 @@ function buildTimestampContent(formattedDate: string): string {
     
 ## Servidores donde se puede promocionar
 > [GuilleVGX - Brawl Stars](https://discord.gg/77sQHhmZkm)
-> [GoDeik TEAM](https://discord.gg/h2mSWgcMag)
+> [GoDeik TEAM](https://discord.gg/CKZUMsqhxM)
 > [Templo de los ricochets (iKaoss community)](https://discord.gg/6VhNHVMgcr)
 > [Rol & Role coaching](https://discord.gg/b7eZh27aDH)
 > [Brawl Stars Fénix](https://discord.gg/T2QCXxXX8a)
 > [ELPIPEKAS - BRAWL STARS](https://discord.gg/pPpdwrMuBk)
 > [Pizza BS](https://discord.gg/jcmeX4bS9g)
 > [Cats World BS](https://discord.gg/n6qqa5CyN7)
-> [Team Turtle](https://discord.gg/jg9Yet8pNW)
-    
+> [DGP Community](https://discord.gg/EVMJKXS8Tf)
+> [Comunidad de Boss](https://discord.gg/comunidad-de-boss-1208187837934207086)
+
 *Plantilla actualizada cada 2 min, última actualización a las \`${formattedDate}\`.*
     ** **
 `
@@ -496,7 +497,7 @@ y en el top Global.**
 ### ʚ —— ˗ ˏ NUESTROS CLUBES ˊˎ ˗ —— ɞ
 \`\`\`${clubsValues}\`\`\`
 
-## \`📨\` ¡INTERESADOS Al MD!
+## 📨 ¡INTERESADOS Al MD!
 `
 }
 

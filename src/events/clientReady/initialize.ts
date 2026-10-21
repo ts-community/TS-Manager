@@ -4,6 +4,8 @@ import { ActivityType, Client } from 'discord.js'
 import { mongoURL } from '../../config/env'
 import logger from '../../utils/logger'
 import { publishServiceThreads } from '../../services/services'
+import { schedulePanelsSync } from '../../services/asociaciones'
+import { startTagRoleManager } from '../../services/tagRole'
 
 export default {
   once: true,
@@ -23,6 +25,17 @@ export default {
 
     await mongoose.connect(mongoURL)
     logger.success('Database connected\n')
+
+    // Sincroniza los paneles a los 15s de arrancar (con debounce para no re-renderizar por cada cambio)
+    // Va después de conectar la BD porque syncPanels consulta las asociaciones
+    schedulePanelsSync(client, 15_000)
+
+    // El gestor del rol por etiqueta TS no debe bloquear/fallar el resto del arranque
+    startTagRoleManager(client).catch(error => {
+      logger.error('TagRole: error arrancando el gestor', {
+        reason: error instanceof Error ? error.message : 'Unknown error'
+      })
+    })
 
     if (process.env.NODE_ENV === 'development') {
       logger.info('Looking for file changes...\n')

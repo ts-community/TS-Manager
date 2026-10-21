@@ -107,7 +107,7 @@ export async function checkBumpReminders(client: Client): Promise<void> {
       const bumpGuildId = 'guildId' in channel ? String(channel.guildId) : defaultGuildId
       const bumpGuild = 'guild' in channel ? channel.guild ?? null : null
       const url = service === 'disboard'
-        ? `https://disboard.org/server/join/${bumpGuildId}`
+        ? `https://disboard.org/es/server/${bumpGuildId}`
         : bump.pageUrl || 'https://discadia.com'
       const command = service === 'disboard'
         ? `</bump:${DISBOARD_BUMP_COMMAND_ID}>`
@@ -117,10 +117,10 @@ export async function checkBumpReminders(client: Client): Promise<void> {
         .setTitle('¡Es hora de bumpear el servidor!')
         .setDescription(
           [
-            `📈 ¡Es hora de bumpear nuestro servidor utilizando el comando ${command}!`,
+            `¡Es hora de bumpear nuestro servidor utilizando el comando ${command}!`,
             ...(service === 'disboard'
-              ? [`⭐ Valóranos en [Disboard](${url}) para ayudarnos a crecer como servidor.`]
-              : [`⭐ Vota por nosotros en [Discadia](${url}) para ayudarnos a crecer como servidor.`])
+              ? [`\n-# ⭐ Valóranos en [Disboard](${url}) para ayudarnos a crecer como servidor.`]
+              : [`\n-# ⭐ Vota por nosotros en [Discadia](${url}) para ayudarnos a crecer como servidor.`])
           ].join('\n')
         )
         .setURL(url)
