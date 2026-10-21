@@ -185,6 +185,41 @@ export async function sendAsociacionesLog(client: Client, embed: EmbedBuilder): 
   }
 }
 
+// Comprueba si algún representante de asociación ha salido del servidor y avisa con embed rojo.
+// Se ejecuta cada 1 h: si sigue ausente, vuelve a avisar (el aviso es idempotente a propósito).
+export async function checkRepresentantesAusentes(client: Client): Promise<void> {
+  const guild = await resolveGuild(client)
+  if (!guild) return
+
+  const conRepresentante = await Asociacion.find({ representanteId: { $ne: null } })
+  if (!conRepresentante.length) return
+
+  const ausentes: AsociacionDocument[] = []
+  for (const asociacion of conRepresentante) {
+    const repId = asociacion.representanteId as string
+    // Primero la caché de miembros (sin coste); fetch solo si no está
+    const esta = guild.members.cache.has(repId) ||
+      (await guild.members.fetch(repId).catch(() => null)) !== null
+    if (!esta) ausentes.push(asociacion)
+  }
+
+  if (!ausentes.length) return
+
+  const embed = new EmbedBuilder()
+    .setColor(0xED4245)
+    .setTitle('❌ Representantes que salieron del servidor')
+    .setDescription(
+      ausentes
+        .map(a => `${EMOJI.canal} **${a.servidor}** (<#${a.canalId}>)\n${EMOJI.representante} Representante: <@${a.representanteId}> ya no está en el servidor`)
+        .join('\n\n')
+    )
+    .addFields({ name: 'Acción sugerida', value: 'Asigna un nuevo representante con `/asociaciones editar`.' })
+    .setTimestamp()
+
+  logger.warn('Asociaciones: representantes ausentes detectados', { cantidad: ausentes.length })
+  await sendAsociacionesLog(client, embed)
+}
+
 // Avisa al staff de las asociaciones cuya fecha de renovación ya llegó
 export async function checkDueAsociaciones(client: Client): Promise<void> {
   const due = await Asociacion.find({
@@ -413,8 +448,8 @@ function groupContainers(group: StaffGroup): Container[] {
   const accent = assigned ? 0x00b0f4 : 0xffcc00
   const renovadas = group.items.filter(i => renewalState(i.nextRenovationDate, now).icon !== '❌').length
   const header = assigned
-    ? `### 📌 <@${group.staffId}> — ${renovadas}/${group.items.length}`
-    : `### 📋 Sin asignar — ${group.items.length}`
+    ? `### 📌 <@${group.staffId}> - ${renovadas}/${group.items.length}`
+    : `### 📋 Sin asignar - ${group.items.length}`
 
   const containers: Container[] = []
 
@@ -436,18 +471,20 @@ function groupContainers(group: StaffGroup): Container[] {
   const startCard = () => {
     builder = new ContainerBuilder().setAccentColor(accent)
     containers.push(builder!)
+    builder!.addTextDisplayComponents(new TextDisplayBuilder().setContent(header))
+    // Separador entre el nombre del staff y sus asociaciones
+    builder!.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
     length = header.length
     firstInCard = true
-    builder!.addTextDisplayComponents(new TextDisplayBuilder().setContent(header))
   }
 
   for (const item of group.items) {
     const estado = renewalState(item.nextRenovationDate, now)
     const content = assigned
       ? [
-          `${estado.icon} — <#${item.canalId}>`,
-          `🗓️ <t:${unix(item.nextRenovationDate)}:R>`,
-          `${EMOJI.representante} ${item.representanteId ? `<@${item.representanteId}>` : '*Sin representante*'}`
+          `${estado.icon} <#${item.canalId}>`,
+          `${EMOJI.proxima} Próxima Renovación: <t:${unix(item.nextRenovationDate)}:R>`,
+          `${EMOJI.representante} Representante: ${item.representanteId ? `<@${item.representanteId}>` : '*Sin representante*'}`
         ].join('\n')
       : `${EMOJI.canal} <#${item.canalId}>`
 
@@ -515,8 +552,21 @@ function compareNames(a: string, b: string): number {
   return normalizeSortKey(a).localeCompare(normalizeSortKey(b), 'es')
 }
 
+// Staff ordenado por n.º de asociaciones (de más a menos); "Sin asignar" siempre al final
+function sortStaffGroupsByLoad(groups: StaffGroup[]): StaffGroup[] {
+  return groups.sort((a, b) => {
+    if (!a.staffId) return 1
+    if (!b.staffId) return -1
+    if (b.items.length !== a.items.length) return b.items.length - a.items.length
+    return compareNames(a.nombre, b.nombre)
+  })
+}
+
 let staffCache: { at: number, groups: StaffGroup[] } | null = null
 const STAFF_CACHE_TTL = 5 * 60 * 1000
+
+// Diggestos de los mensajes del hilo en vivo por id de mensaje: evita edits idénticos en cada sync
+const liveMessagesDigest = new Map<string, string>()
 
 export async function fetchStaffGroups(client: Client): Promise<StaffGroup[]> {
   if (staffCache && Date.now() - staffCache.at < STAFF_CACHE_TTL) return staffCache.groups
@@ -548,7 +598,8 @@ export async function fetchStaffGroups(client: Client): Promise<StaffGroup[]> {
       groups.push({ staffId: null, nombre: 'Sin asignar', items: enriched })
       continue
     }
-    const member = guild ? await guild.members.fetch(key).catch(() => null) : null
+    // Caché de miembros primero: evita una llamada a la API por cada staff en cada sync
+    const member = guild ? (guild.members.cache.get(key) ?? await guild.members.fetch(key).catch(() => null)) : null
     groups.push({
       staffId: key,
       nombre: member?.displayName ?? `ID ${key}`,
@@ -556,11 +607,7 @@ export async function fetchStaffGroups(client: Client): Promise<StaffGroup[]> {
     })
   }
 
-  groups.sort((a, b) => {
-    if (!a.staffId) return 1
-    if (!b.staffId) return -1
-    return compareNames(a.nombre, b.nombre)
-  })
+  sortStaffGroupsByLoad(groups)
 
   if (!groups.some(g => !g.staffId)) {
     groups.push({ staffId: null, nombre: 'Sin asignar', items: [] })
@@ -587,6 +634,7 @@ export async function fetchStaffGroups(client: Client): Promise<StaffGroup[]> {
           emoji: emojiFromChannelName(child.name)
         })
       }
+      unassignedGroup.items.sort((a, b) => compareNames(a.servidor, b.servidor))
     }
   }
 
@@ -720,7 +768,7 @@ async function findExistingStaffChannel(
     if (child.type !== ChannelType.GuildText) continue
     if (!child.name.startsWith(STAFF_CHANNEL_PREFIX)) continue
     if (normalizeDiscordChannelName(child.name) === target) {
-      return await guild.channels.fetch(child.id).catch(() => null) as unknown as TextChannel
+      return guild.channels.cache.get(child.id) as unknown as TextChannel
     }
   }
   return null
@@ -761,6 +809,18 @@ async function ensureStaffChannel(
     overwrites.push({ id: staffId, allow: viewWithHistory, deny: [PermissionFlagsBits.SendMessages] })
   }
 
+  // Discord rechaza TODA la creación si algún ID no existe en el servidor (throw Invalid Form Body)
+  const safeOverwrites = overwrites.filter(o =>
+    o.id === guild.roles.everyone.id ||
+    guild.roles.cache.has(o.id) ||
+    guild.members.cache.has(o.id)
+  )
+  if (safeOverwrites.length !== overwrites.length) {
+    logger.warn('AsociacionesPanel: sobrescrituras ignoradas (rol o miembro inexistente)', {
+      ignoradas: overwrites.length - safeOverwrites.length
+    })
+  }
+
   const category = await guild.channels.fetch(ASOCIACIONES_CATEGORY_ID).catch(() => null)
   if (!category || category.type !== ChannelType.GuildCategory) {
     logger.warn('AsociacionesPanel: categoría de asociaciones no disponible para canal de staff')
@@ -785,7 +845,11 @@ async function ensureStaffChannel(
     const currentParent = adopted.parentId
     if (currentParent !== category.id) await adopted.setParent(category.id).catch(() => {})
     if (adopted.name !== desiredName) await adopted.setName(desiredName, 'Sincronización del panel de staff').catch(() => {})
-    await adopted.permissionOverwrites.set(overwrites as never).catch(() => {})
+    // Al adoptar un canal manual se aplican los permisos de staff, sin romper si hay IDs desconocidos
+    await adopted.permissionOverwrites.set([...safeOverwrites] as never).catch(error => {
+      logger.warn('AsociacionesPanel: no se pudieron aplicar permisos al canal adoptado', { channelId: adopted.id })
+      logger.warn(error instanceof Error ? error.message : 'Unknown error')
+    })
     doc.staffChannels.push({ staffId, channelId: adopted.id, messageIds: [] })
     doc.markModified('staffChannels')
     await doc.save()
@@ -793,14 +857,24 @@ async function ensureStaffChannel(
     return { channelId: adopted.id, created: true }
   }
 
-  const created = await guild.channels.create({
-    name: desiredName,
-    type: ChannelType.GuildText,
-    parent: category.id,
-    topic: `📋 Canales asignados a ${staffDisplayName} (ID: ${staffId})`,
-    reason: 'Canal de organización por staff',
-    permissionOverwrites: overwrites as never
-  })
+  let created
+  try {
+    created = await guild.channels.create({
+      name: desiredName,
+      type: ChannelType.GuildText,
+      parent: category.id,
+      topic: `📋 Canales asignados a ${staffDisplayName} (ID: ${staffId})`,
+      reason: 'Canal de organización por staff',
+      permissionOverwrites: [...safeOverwrites] as never
+    })
+  } catch (error) {
+    logger.error('AsociacionesPanel: fallo creando canal de staff', {
+      name: desiredName,
+      staffId,
+      reason: error instanceof Error ? error.message : 'Unknown error'
+    })
+    return { channelId: '', created: false }
+  }
 
   if (entry) {
     doc.staffChannels = doc.staffChannels.filter(e => e.staffId !== staffId)
@@ -844,9 +918,8 @@ async function cleanupObsoleteStaffChannels(
     if (child.type !== ChannelType.GuildText) continue
     if (managedIds.has(child.id)) continue
     if (!orphanPattern.test(child.name)) continue
-    const fetched = await guild.channels.fetch(child.id).catch(() => null)
-    if (!fetched) continue
-    const textChannel = fetched as unknown as { deletable: boolean, delete: (r?: string) => Promise<unknown> }
+    // Usamos el objeto de la caché directamente: una fetch por hijo es una llamada a la API innecesaria
+    const textChannel = child as unknown as { id: string, deletable: boolean, delete: (r?: string) => Promise<unknown>, name: string }
     if (!textChannel.deletable) continue
     await textChannel.delete('Canal de staff huérfano').catch(() => {})
     logger.info('AsociacionesPanel: canal de staff huérfano eliminado', { channelId: child.id, name: child.name })
@@ -867,12 +940,8 @@ async function orderCategoryChannels(
 
   const target: ChildChannel[] = []
 
-  // Cada staff agrupado con sus canales, alfabético (igual que organizaPorStaff del bot viejo); Sin asignar al final
-  const sortedGroups = [...groups].sort((a, b) => {
-    if (!a.staffId) return 1
-    if (!b.staffId) return -1
-    return compareNames(a.nombre, b.nombre)
-  })
+  // Cada staff agrupado con sus canales, ordenado por n.º de asociaciones (más a menos); Sin asignar al final
+  const sortedGroups = sortStaffGroupsByLoad([...groups])
 
   for (const group of sortedGroups) {
     const staffIdKey = group.staffId ?? 'sin-asignar'
@@ -980,12 +1049,14 @@ async function syncLiveThread(client: Client, groups: StaffGroup[]): Promise<voi
   // Si falta el resumen o cambió el número de secciones V2: borrar TODO y recrear
   const structureChanged = !summary || v2s.length !== containers.length
   if (structureChanged) {
+    liveMessagesDigest.clear()
     for (const msg of botMsgs) {
       await (msg as unknown as { delete: (r?: string) => Promise<unknown> }).delete().catch(() => {})
       await sleep(100)
     }
     try {
-      await (t.send as (p: { embeds: EmbedBuilder[] }) => Promise<unknown>)({ embeds: [createSummaryEmbed(groups)] })
+      const summaryEmbed = createSummaryEmbed(groups)
+      await (t.send as (p: { embeds: EmbedBuilder[] }) => Promise<unknown>)({ embeds: [summaryEmbed] })
       await sleep(200)
       for (const container of containers) {
         await (t.send as (p: { flags: number, components: Container[] }) => Promise<unknown>)({ flags: MessageFlags.IsComponentsV2, components: [container] })
@@ -1000,12 +1071,24 @@ async function syncLiveThread(client: Client, groups: StaffGroup[]): Promise<voi
     return
   }
 
-  // Estructura intacta: solo actualizar contenido
-  await (summary as unknown as { edit: (p: { embeds: EmbedBuilder[] }) => Promise<unknown> }).edit({ embeds: [createSummaryEmbed(groups)] }).catch(() => {})
-  for (let i = 0; i < containers.length; i++) {
-    await (v2s[i] as unknown as { edit: (p: unknown) => Promise<unknown> }).edit({ flags: MessageFlags.IsComponentsV2, components: [containers[i]] }).catch(() => {})
+  // Estructura intacta: solo actualizar el contenido que cambió (digest en caché = cero llamadas)
+  const summaryDigest = JSON.stringify(createSummaryEmbed(groups).toJSON())
+  let edited = 0
+  if (liveMessagesDigest.get(summary.id) !== summaryDigest) {
+    await (summary as unknown as { edit: (p: { embeds: EmbedBuilder[] }) => Promise<unknown> }).edit({ embeds: [createSummaryEmbed(groups)] }).catch(() => {})
+    liveMessagesDigest.set(summary.id, summaryDigest)
+    edited++
     await sleep(150)
   }
+  for (let i = 0; i < containers.length; i++) {
+    const digest = containerDigest(containers[i])
+    if (liveMessagesDigest.get(v2s[i].id) === digest) continue
+    await (v2s[i] as unknown as { edit: (p: unknown) => Promise<unknown> }).edit({ flags: MessageFlags.IsComponentsV2, components: [containers[i]] }).catch(() => {})
+    liveMessagesDigest.set(v2s[i].id, digest)
+    edited++
+    await sleep(150)
+  }
+  if (edited > 1) logger.info('AsociacionesPanel: hilo en vivo actualizado', { mensajes: edited })
 }
 
 async function syncPerStaffChannels(client: Client, doc: AsociacionesPanelDocument, groups: StaffGroup[]): Promise<void> {
@@ -1019,33 +1102,41 @@ async function syncPerStaffChannels(client: Client, doc: AsociacionesPanelDocume
 
   for (const group of groupsWithChannel) {
     const staffIdKey = group.staffId ?? 'sin-asignar'
-    const desiredName = staffChannelName(group.nombre)
+    try {
+      const desiredName = staffChannelName(group.nombre)
 
-    let entry = doc.staffChannels.find(e => e.staffId === staffIdKey)
-    if (!entry) {
-      await ensureStaffChannel(client, guild, doc, staffIdKey, desiredName, group.nombre)
-      entry = doc.staffChannels.find(e => e.staffId === staffIdKey)
+      let entry = doc.staffChannels.find(e => e.staffId === staffIdKey)
       if (!entry) {
-        logger.warn('AsociacionesPanel: no se pudo crear el canal de staff', { staffId: staffIdKey })
-        continue
+        await ensureStaffChannel(client, guild, doc, staffIdKey, desiredName, group.nombre)
+        entry = doc.staffChannels.find(e => e.staffId === staffIdKey)
+        if (!entry) {
+          logger.warn('AsociacionesPanel: no se pudo crear el canal de staff', { staffId: staffIdKey })
+          continue
+        }
       }
-    }
 
-    const channel = await client.channels.fetch(entry.channelId).catch(() => null)
-    if (!channel?.isTextBased()) continue
-    const textChannel = channel as TextChannel
+      const channel = await client.channels.fetch(entry.channelId).catch(() => null)
+      if (!channel?.isTextBased()) continue
+      const textChannel = channel as TextChannel
 
-    if (textChannel.name !== desiredName) {
-      await textChannel.setName(desiredName, 'Sincronización del panel de staff').catch(() => {})
-    }
+      if (textChannel.name !== desiredName) {
+        await textChannel.setName(desiredName, 'Sincronización del panel de staff').catch(() => {})
+      }
 
-    // Contenedor con el formato exacto del bot viejo (header 📌 asignado — r/n, estado por asociación)
-    const containers = groupContainers(group)
-    const ids = await syncV2Channel(textChannel as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, containers, entry.messageIds ?? [])
-    if (entry.messageIds?.join(',') !== ids.join(',')) {
-      entry.messageIds = ids
-      doc.markModified('staffChannels')
-      await doc.save()
+      // Contenedor con el formato del bot viejo (header 📌 asignado, estado por asociación)
+      const containers = groupContainers(group)
+      const ids = await syncV2Channel(textChannel as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, containers, entry.messageIds ?? [])
+      if (entry.messageIds?.join(',') !== ids.join(',')) {
+        entry.messageIds = ids
+        doc.markModified('staffChannels')
+        await doc.save()
+      }
+    } catch (error) {
+      // Un fallo en un staff no debe abortar el resto de canales
+      logger.warn('AsociacionesPanel: fallo sincronizando canal de staff', {
+        staffId: staffIdKey,
+        reason: error instanceof Error ? error.message : 'Unknown error'
+      })
     }
   }
 }

@@ -135,38 +135,6 @@ function formatStatus(type: BrawlClubInfo['type']): { emoji: string; label: stri
   return { emoji: EMOJI_CLOSED, label: 'Cerrado' }
 }
 
-function pluralize(value: number, singular: string, plural: string): string {
-  return `${value} ${value === 1 ? singular : plural}`
-}
-
-function formatRelativeTime(date: Date): string {
-  const totalSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000))
-
-  if (totalSeconds < 60) return `hace ${pluralize(totalSeconds, 'seg', 'segs')}`
-
-  const minutes = Math.floor(totalSeconds / 60)
-  if (minutes < 60) {
-    const seconds = totalSeconds % 60
-    return seconds > 0
-      ? `hace ${pluralize(minutes, 'min', 'mins')} y ${pluralize(seconds, 'seg', 'segs')}`
-      : `hace ${pluralize(minutes, 'min', 'mins')}`
-  }
-
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) {
-    const restMinutes = minutes % 60
-    return restMinutes > 0
-      ? `hace ${pluralize(hours, 'h', 'hs')} y ${pluralize(restMinutes, 'min', 'mins')}`
-      : `hace ${pluralize(hours, 'h', 'hs')}`
-  }
-
-  const days = Math.floor(hours / 24)
-  const restHours = hours % 24
-  return restHours > 0
-    ? `hace ${pluralize(days, 'día', 'días')} y ${pluralize(restHours, 'h', 'hs')}`
-    : `hace ${pluralize(days, 'día', 'días')}`
-}
-
 function normalizeTag(tag: string): string {
   const value = tag.trim().toUpperCase()
   return value.startsWith('#') ? value : `#${value}`
@@ -380,7 +348,7 @@ function createClubListEmbed(clubs: BrawlClubInfo[], updatedAt: Date): EmbedBuil
     .setColor('#22d3ee')
     .setDescription(`## ${CLUB_EMOJI} Clubes TS`)
     .addFields(fields)
-    .setFooter({ text: `Última actualización: ${formatRelativeTime(updatedAt)}` })
+    .setFooter({ text: `Última actualización: ${formatTemplateTimestamp(updatedAt)}` })
 }
 
 export async function buildBrawlStarsEmbeds(client: Client): Promise<EmbedBuilder[] | null> {
@@ -518,17 +486,17 @@ y en el top Global.**
 
 ### ʚ —— ˗ ˏ QUE OFRECEMOS ˊˎ ˗ —— ɞ
 > **\`‎ ୧🔰୨\` \`${clubs}\` clubes de Brawl Stars**
-> **\`‎ ୧💬୨\` Comunidad de Discord con \`${members}\` miembros**
-> **\`‎ ୧🛠️୨\` Staff experimentado en la creación de clubes**
+> **\`‎ ୧💬୨\` Comunidad con \`${members}\` miembros**
+> **\`‎ ୧🛠️୨\` Staff experimentado**
 
 ### ʚ —— ˗ ˏ QUE BUSCAMOS ˊˎ ˗ —— ɞ
-> **\` ୧✨୨ \` Miembros activos para nuestros clubes**
-> **\` ୧🏗️୨ \` Personas interesadas en la creación de clubes**
+> **\` ୧✨୨ \` Miembros para nuestros clubes**
+> **\` ୧👤୨ \` Personas interesadas en la creación de clubes**
 
 ### ʚ —— ˗ ˏ NUESTROS CLUBES ˊˎ ˗ —— ɞ
 \`\`\`${clubsValues}\`\`\`
 
-**╭\`ɞ 📨\` Interesados:** ¡Al MD!
+### \`📨\` ¡INTERESADOS Al MD!
 `
 }
 
@@ -629,7 +597,7 @@ export async function refreshClubTemplate(client: Client): Promise<void> {
         const line1Right = `${r.trophies.toLocaleString('es').padStart(9)} 🏆`
         const line2Left = `+${r.reqText.padStart(4)} 🏆`
         const line2Right = r.rankText
-        return `${line1Left.padEnd(HALF)}${line1Right}\n${line2Left.padEnd(HALF)}${line2Right}`
+        return `${line1Left.padEnd(HALF)}${line1Right}${line2Left.padEnd(HALF)}${line2Right}`
       })
       .join('\n')
 

@@ -5,10 +5,11 @@ import { refreshBrawlStarsEmbed, refreshClubTemplate } from '../../services/club
 import { runChannelPurges } from '../../services/purge'
 import { checkBumpReminders } from '../../services/bumps'
 import { scanNextTagMember, startTagRoleManager } from '../../services/tagRole'
-import { checkDueAsociaciones, schedulePanelsSync } from '../../services/asociaciones'
+import { checkDueAsociaciones, checkRepresentantesAusentes, schedulePanelsSync } from '../../services/asociaciones'
 
 const SECOND = 1000
 const MINUTE = 60 * SECOND
+const HOUR = 60 * MINUTE
 
 // Todas las tareas periódicas del bot viven en sus módulos y se registran aquí.
 export default {
@@ -24,6 +25,8 @@ export default {
     runInterval([runChannelPurges.bind(null, client)], MINUTE)
     runInterval([checkBumpReminders.bind(null, client)], MINUTE)
     runInterval([checkDueAsociaciones.bind(null, client)], 30 * MINUTE)
+    // Comprobación espaciada: si un representante sigue ausente, vuelve a avisar en cada pasada
+    runInterval([checkRepresentantesAusentes.bind(null, client)], HOUR)
     runInterval([scanNextTagMember], 800)
   }
 } satisfies Event<'clientReady'>
