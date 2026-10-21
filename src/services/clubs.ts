@@ -496,7 +496,7 @@ y en el top Global.**
 ### ʚ —— ˗ ˏ NUESTROS CLUBES ˊˎ ˗ —— ɞ
 \`\`\`${clubsValues}\`\`\`
 
-### \`📨\` ¡INTERESADOS Al MD!
+## \`📨\` ¡INTERESADOS Al MD!
 `
 }
 
@@ -597,7 +597,7 @@ export async function refreshClubTemplate(client: Client): Promise<void> {
         const line1Right = `${r.trophies.toLocaleString('es').padStart(9)} 🏆`
         const line2Left = `+${r.reqText.padStart(4)} 🏆`
         const line2Right = r.rankText
-        return `${line1Left.padEnd(HALF)}${line1Right}${line2Left.padEnd(HALF)}${line2Right}`
+        return `${line1Left.padEnd(HALF)}${line1Right.padEnd(HALF)}${line2Left.padEnd(HALF)}${line2Right.padEnd(HALF)}`
       })
       .join('\n')
 

@@ -12,15 +12,11 @@ import {
   MessageFlags,
   type Client,
   type Message,
-  PermissionFlagsBits,
   ChannelType,
-  type TextChannel,
   type ThreadChannel,
 } from 'discord.js'
 import Asociacion, { type AsociacionDocument } from '../models/Asociacion'
-import AsociacionesPanel, { PANEL_KEY, type AsociacionesPanelDocument } from '../models/AsociacionesPanel'
 import { guildId as botGuildId } from '../config/env'
-import { getGuildConfig } from './guild'
 import logger from '../utils/logger'
 
 // Re-export logger for consumers
@@ -73,38 +69,6 @@ export function cleanChannelName(rawName: string): string {
     .replace(/^[^\p{L}\p{N}]+/u, '')
     .replace(/[-_]+/g, ' ')
     .trim()
-}
-
-// Convierte un nombre de staff a formato compatible con Discord (normalización que hace Discord automáticamente)
-export function normalizeStaffName(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize('NFD') // Descompone acentos
-    .replace(/[\u0300-\u036f]/g, '') // Elimina diacríticos (acentos)
-    // Reemplazar caracteres que Discord elimina por guiones o nada
-    .replace(/[|()[\]{}]/g, '') // Eliminar paréntesis, corchetes, llaves, pipes
-    .replace(/[^\w\s\-_.~]/g, '') // Solo caracteres que Discord permite
-    .replace(/\s+/g, '-') // Espacios → guiones
-    .replace(/-+/g, '-') // Múltiples guiones → uno solo
-    .replace(/^-|-$/g, '') // Quita guiones al inicio/final
-    .trim()
-}
-
-// Aplica la misma normalización que Discord hace automáticamente a los nombres de canales
-export function normalizeDiscordChannelName(channelName: string): string {
-  return channelName
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^\w\-_.~]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 100)
-}
-
-// Crea el nombre final del canal como lo creará Discord (prefijo + nombre normalizado + sufijo)
-export function createDiscordChannelName(staffDisplayName: string): string {
-  const normalizedName = normalizeStaffName(staffDisplayName)
-  return `${STAFF_CHANNEL_PREFIX}${normalizeDiscordChannelName(normalizedName)}${STAFF_CHANNEL_SUFFIX}`
 }
 
 // Nombre display a partir del canal: "「❤」el-sotano-oficial" -> "El Sotano Oficial"
@@ -374,10 +338,8 @@ export function buildAssociationDetailPayload(
 export const ASOCIACIONES_LIVE_THREAD_ID = '1562220631783903382'
 // Canal anfitrión del hilo en vivo (no se trata como asociación)
 export const ASOCIACIONES_THREAD_CHANNEL_ID = '1436773704980758548'
-// Nombre del canal privado del staff (posicionado en la categoría de asociaciones)
-// Iconos decorativos para los canales de staff (prefijo y sufijo) - formato compatible con Discord
+// Icono decorativo de canales de staff en desuso (se eliminan automáticamente en cada sync)
 export const STAFF_CHANNEL_PREFIX = '﹏︿'
-export const STAFF_CHANNEL_SUFFIX = '︿﹏'
 // Roles encargados de alianzas / cazas (IDs configurados)
 export const ALIANZAS_ROLE_IDS = [
   '1170449867823382649',
@@ -424,10 +386,6 @@ export function asocId(a: AsociacionLike): string {
 function emojiFromChannelName(channelName: string | undefined): string {
   const match = /「(.+?)」/.exec(channelName ?? '')
   return match?.[1] ?? '☕'
-}
-
-export function staffChannelName(nombre: string): string {
-  return createDiscordChannelName(nombre)
 }
 
 // Estado de renovación (lógica del bot viejo): ✅ renovada, ⚠️ expira en <= 2 días, ❌ sin renovar
@@ -646,8 +604,6 @@ export function invalidateStaffCache(): void {
   staffCache = null
 }
 
-const contentCache = new Map<string, string>()
-
 function containerDigest(container: Container): string {
   return JSON.stringify(container.toJSON())
 }
@@ -662,314 +618,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-// Compara la estructura de los componentes: si Discord la cambió/rompió hay que recrer & sustituir
-function compareMessageStructure(oldMessage: unknown, containers: Container[]): boolean {
-  const msg = oldMessage as { components?: unknown[] } | null
-  if (!msg?.components || !Array.isArray(msg.components)) return false
-  const expected = containers[0].toJSON().components as { type: number }[]
-  if (msg.components.length !== expected.length) return false
-  return msg.components.every(
-    (c, index) => (c as { type?: number }).type === expected[index].type
-  )
-}
-
-// Borra los mensajes viejos del bot en un canal (usado al rehacer el panel)
-async function deleteBotMessages(channel: { messages: { delete: (id: string) => Promise<unknown> } }, ids: string[]): Promise<void> {
-  for (const id of ids) {
-    await channel.messages.delete(id).catch(() => {})
-  }
-}
-
-async function syncMessages(
-  channel: { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } },
-  containers: Container[],
-  ids: string[],
-  fallback?: EmbedBuilder[]
-): Promise<string[]> {
-  const nextIds: string[] = []
-
-  for (let i = 0; i < containers.length; i++) {
-    const digest = containerDigest(containers[i])
-    const cacheKey = `${channel.id}:${i}`
-    const existingId = ids[i]
-    nextIds.push(existingId ?? '')
-    if (contentCache.get(cacheKey) === digest && existingId) continue
-
-    const payload = { flags: MessageFlags.IsComponentsV2, components: [containers[i]] }
-    let done = false
-    if (existingId) {
-      const message = await channel.messages.fetch(existingId).catch(() => null)
-      if (message) {
-        // Un mensaje no-V2 o con estructura rota no se puede editar al nuevo formato: se borra y se recrea
-        if (isV2(message) && compareMessageStructure(message, containers)) {
-          try {
-            await (message as unknown as { edit: (p: unknown) => Promise<unknown> }).edit(payload)
-            contentCache.set(cacheKey, digest)
-            done = true
-          } catch {
-            contentCache.delete(cacheKey)
-          }
-        } else {
-          await deleteBotMessages(channel, [existingId])
-          contentCache.delete(cacheKey)
-        }
-      }
-    }
-
-    if (!done) {
-      try {
-        const created = await channel.messages.send(payload)
-        nextIds[i] = created.id
-        contentCache.set(cacheKey, digest)
-      } catch (error) {
-        logger.error('AsociacionesPanel: no se pudo enviar el mensaje del panel', {
-          message: error instanceof Error ? error.message : 'Unknown error'
-        })
-        if (fallback?.length) {
-          // Fallback del bot viejo: envía un embed clásico si el canal no acepta Components V2
-          await (channel as unknown as { send: (p: { embeds: EmbedBuilder[] }) => Promise<unknown> }).send({ embeds: fallback }).catch(() => {})
-        }
-      }
-    }
-  }
-
-  for (let i = containers.length; i < ids.length; i++) {
-    const staleId = ids[i]
-    contentCache.delete(`${channel.id}:${i}`)
-    await channel.messages.delete(staleId).catch(() => {})
-  }
-
-  return nextIds.filter(Boolean)
-}
-
-async function syncV2Channel(
-  channel: { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } },
-  containers: Container[],
-  currentIds: string[],
-  fallback?: EmbedBuilder[]
-): Promise<string[]> {
-  return syncMessages(channel, containers, currentIds, fallback)
-}
-
 async function resolveGuild(client: Client) {
   return client.guilds.cache.get(botGuildId) ?? await client.guilds.fetch(botGuildId).catch(() => null)
-}
-
-// Busca en la categoría un canal de staff ya existente con el mismo nombre (evita duplicados como el bot viejo)
-async function findExistingStaffChannel(
-  guild: NonNullable<Awaited<ReturnType<typeof resolveGuild>>>,
-  staffDisplayName: string
-): Promise<TextChannel | null> {
-  const category = await guild.channels.fetch(ASOCIACIONES_CATEGORY_ID).catch(() => null)
-  if (!category || category.type !== ChannelType.GuildCategory) return null
-  const target = normalizeDiscordChannelName(staffChannelName(staffDisplayName))
-  const children = guild.channels.cache.filter(c => c.parentId === category.id) as unknown as Map<string, { id: string, type: number, name: string }>
-  for (const child of children.values()) {
-    if (child.type !== ChannelType.GuildText) continue
-    if (!child.name.startsWith(STAFF_CHANNEL_PREFIX)) continue
-    if (normalizeDiscordChannelName(child.name) === target) {
-      return guild.channels.cache.get(child.id) as unknown as TextChannel
-    }
-  }
-  return null
-}
-
-async function ensureStaffChannel(
-  client: Client,
-  guild: NonNullable<Awaited<ReturnType<typeof resolveGuild>>>,
-  doc: AsociacionesPanelDocument,
-  staffId: string,
-  desiredName: string,
-  staffDisplayName: string
-): Promise<{ channelId: string, messageIdFirst?: string, created: boolean }> {
-  const entry = doc.staffChannels.find(e => e.staffId === staffId)
-
-  if (entry) {
-    const channel = await client.channels.fetch(entry.channelId).catch(() => null)
-    if (!channel?.isTextBased()) {
-      doc.staffChannels = doc.staffChannels.filter(e => e.staffId !== staffId)
-      doc.markModified('staffChannels')
-      await doc.save()
-    }
-  }
-
-  const config = await getGuildConfig()
-  // Igual que en el bot viejo: staff y cazas pueden VER el canal y leer el historial, pero no escribir
-  const viewWithHistory = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory]
-  const overwrites: { id: string, allow?: bigint[], deny?: bigint[] }[] = [
-    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }
-  ]
-  for (const roleId of config.staffRoleIds) {
-    overwrites.push({ id: roleId, allow: viewWithHistory, deny: [PermissionFlagsBits.SendMessages] })
-  }
-  for (const cazaRoleId of ALIANZAS_ROLE_IDS) {
-    overwrites.push({ id: cazaRoleId, allow: viewWithHistory, deny: [PermissionFlagsBits.SendMessages] })
-  }
-  if (staffId !== 'sin-asignar') {
-    overwrites.push({ id: staffId, allow: viewWithHistory, deny: [PermissionFlagsBits.SendMessages] })
-  }
-
-  // Discord rechaza TODA la creación si algún ID no existe en el servidor (throw Invalid Form Body)
-  const safeOverwrites = overwrites.filter(o =>
-    o.id === guild.roles.everyone.id ||
-    guild.roles.cache.has(o.id) ||
-    guild.members.cache.has(o.id)
-  )
-  if (safeOverwrites.length !== overwrites.length) {
-    logger.warn('AsociacionesPanel: sobrescrituras ignoradas (rol o miembro inexistente)', {
-      ignoradas: overwrites.length - safeOverwrites.length
-    })
-  }
-
-  const category = await guild.channels.fetch(ASOCIACIONES_CATEGORY_ID).catch(() => null)
-  if (!category || category.type !== ChannelType.GuildCategory) {
-    logger.warn('AsociacionesPanel: categoría de asociaciones no disponible para canal de staff')
-    return { channelId: '', created: false }
-  }
-
-  if (entry) {
-    const channel = await client.channels.fetch(entry.channelId).catch(() => null)
-    if (channel?.isTextBased()) {
-      const c = channel as unknown as { type: number; parentId: string | null; name: string; setName: (n: string, r?: string) => Promise<unknown>; permissionOverwrites: { edit: (id: string, o: unknown) => Promise<unknown> } }
-      if ((c as unknown as { parentId: string | null }).parentId !== category.id) {
-        await (c as unknown as { setParent: (id: string) => Promise<unknown> }).setParent(category.id).catch(() => {})
-      }
-      if (c.name !== desiredName) await c.setName(desiredName, 'Sincronización del panel de staff').catch(() => {})
-      return { channelId: entry.channelId, created: false }
-    }
-  }
-
-  // El bot viejo adoptaba un canal huérfano con el mismo nombre en lugar de crear otro
-  const adopted = await findExistingStaffChannel(guild, staffDisplayName)
-  if (adopted) {
-    const currentParent = adopted.parentId
-    if (currentParent !== category.id) await adopted.setParent(category.id).catch(() => {})
-    if (adopted.name !== desiredName) await adopted.setName(desiredName, 'Sincronización del panel de staff').catch(() => {})
-    // Al adoptar un canal manual se aplican los permisos de staff, sin romper si hay IDs desconocidos
-    await adopted.permissionOverwrites.set([...safeOverwrites] as never).catch(error => {
-      logger.warn('AsociacionesPanel: no se pudieron aplicar permisos al canal adoptado', { channelId: adopted.id })
-      logger.warn(error instanceof Error ? error.message : 'Unknown error')
-    })
-    doc.staffChannels.push({ staffId, channelId: adopted.id, messageIds: [] })
-    doc.markModified('staffChannels')
-    await doc.save()
-    logger.info('AsociacionesPanel: canal de staff existente adoptado', { channelId: adopted.id, staffId })
-    return { channelId: adopted.id, created: true }
-  }
-
-  let created
-  try {
-    created = await guild.channels.create({
-      name: desiredName,
-      type: ChannelType.GuildText,
-      parent: category.id,
-      topic: `📋 Canales asignados a ${staffDisplayName} (ID: ${staffId})`,
-      reason: 'Canal de organización por staff',
-      permissionOverwrites: [...safeOverwrites] as never
-    })
-  } catch (error) {
-    logger.error('AsociacionesPanel: fallo creando canal de staff', {
-      name: desiredName,
-      staffId,
-      reason: error instanceof Error ? error.message : 'Unknown error'
-    })
-    return { channelId: '', created: false }
-  }
-
-  if (entry) {
-    doc.staffChannels = doc.staffChannels.filter(e => e.staffId !== staffId)
-  }
-  doc.staffChannels.push({ staffId, channelId: created.id, messageIds: [] })
-  doc.markModified('staffChannels')
-  await doc.save()
-
-  return { channelId: created.id, created: true }
-}
-
-async function pruneStaffChannels(client: Client, doc: AsociacionesPanelDocument, active: Set<string>): Promise<void> {
-  const stale = doc.staffChannels.filter(entry => !active.has(entry.staffId))
-  const guild = await resolveGuild(client)
-  for (const entry of stale) {
-    const channel = await client.channels.fetch(entry.channelId).catch(() => null)
-    if (channel && 'deletable' in channel && (channel as unknown as { deletable: boolean }).deletable) {
-      await (channel as unknown as { delete: (r?: string) => Promise<unknown> }).delete('Sin asociaciones activas').catch(() => {})
-    }
-    doc.staffChannels = doc.staffChannels.filter(e => e.channelId !== entry.channelId)
-  }
-  if (stale.length) {
-    doc.markModified('staffChannels')
-    await doc.save()
-  }
-
-  if (!guild) return
-  const managedIds = new Set<string>(doc.staffChannels.map(e => e.channelId).filter(Boolean))
-  await cleanupObsoleteStaffChannels(guild, managedIds)
-}
-
-async function cleanupObsoleteStaffChannels(
-  guild: NonNullable<Awaited<ReturnType<typeof resolveGuild>>>,
-  managedIds: Set<string>
-): Promise<void> {
-  const category = await guild.channels.fetch(ASOCIACIONES_CATEGORY_ID).catch(() => null)
-  if (!category || category.type !== ChannelType.GuildCategory) return
-  const orphanPattern = new RegExp(`^${escapeRegExp(STAFF_CHANNEL_PREFIX)}.+${escapeRegExp(STAFF_CHANNEL_SUFFIX)}$`)
-  const children = guild.channels.cache.filter(c => c.parentId === category.id) as unknown as Map<string, { id: string, type: number, name: string, deletable?: boolean }>
-  for (const child of children.values()) {
-    if (child.type !== ChannelType.GuildText) continue
-    if (managedIds.has(child.id)) continue
-    if (!orphanPattern.test(child.name)) continue
-    // Usamos el objeto de la caché directamente: una fetch por hijo es una llamada a la API innecesaria
-    const textChannel = child as unknown as { id: string, deletable: boolean, delete: (r?: string) => Promise<unknown>, name: string }
-    if (!textChannel.deletable) continue
-    await textChannel.delete('Canal de staff huérfano').catch(() => {})
-    logger.info('AsociacionesPanel: canal de staff huérfano eliminado', { channelId: child.id, name: child.name })
-  }
-}
-
-async function orderCategoryChannels(
-  guild: NonNullable<Awaited<ReturnType<typeof resolveGuild>>>,
-  doc: AsociacionesPanelDocument,
-  groups: StaffGroup[]
-): Promise<void> {
-  const category = await guild.channels.fetch(ASOCIACIONES_CATEGORY_ID).catch(() => null)
-  if (!category || category.type !== ChannelType.GuildCategory) return
-
-  type ChildChannel = { id: string, name: string, type: number, rawPosition: number }
-  const children = guild.channels.cache.filter(c => c.parentId === category.id) as unknown as Map<string, ChildChannel>
-  const byId = new Map([...children.values()].map(c => [c.id, c]))
-
-  const target: ChildChannel[] = []
-
-  // Cada staff agrupado con sus canales, ordenado por n.º de asociaciones (más a menos); Sin asignar al final
-  const sortedGroups = sortStaffGroupsByLoad([...groups])
-
-  for (const group of sortedGroups) {
-    const staffIdKey = group.staffId ?? 'sin-asignar'
-    const entry = doc.staffChannels.find(e => e.staffId === staffIdKey)
-    const staffChannel = entry ? byId.get(entry.channelId) : undefined
-    if (staffChannel) target.push(staffChannel)
-
-    // Canales asignados a ese staff, ordenados alfabéticamente por nombre de canal
-    const canalIds = new Set(group.items.map(i => i.canalId))
-    const assocChannels = [...byId.values()]
-      .filter(c => canalIds.has(c.id))
-      .sort((a, b) => cleanChannelName(a.name).localeCompare(cleanChannelName(b.name), 'es', { sensitivity: 'base', numeric: true }))
-    target.push(...assocChannels)
-  }
-
-  const managedIds = new Set<string>([...doc.staffChannels.map(e => e.channelId), ...target.map(t => t.id)].filter(Boolean))
-  const others = [...children.values()]
-    .filter(c => !managedIds.has(c.id) && c.type === ChannelType.GuildText)
-    .sort((a, b) => a.rawPosition - b.rawPosition)
-  target.push(...others)
-
-  const changed = target.some((c, index) => c.rawPosition !== index)
-  if (!changed) return
-
-  await guild.channels.setPositions(
-    target.map((c, index) => ({ channel: c.id, position: index })) as never
-  ).catch(() => {})
-  logger.info('AsociacionesPanel: canales de la categoría reordenados', { cantidad: target.length })
 }
 
 const FAST_SYNC_DELAY_MS = 10_000
@@ -1001,7 +651,6 @@ export async function syncPanels(client: Client): Promise<void> {
   syncPending = true
   try {
     invalidateStaffCache()
-    const doc = await loadPanelConfig()
     const groups = await fetchStaffGroups(client)
     logger.info('AsociacionesPanel: sync iniciada', {
       grupos: groups.length,
@@ -1009,10 +658,6 @@ export async function syncPanels(client: Client): Promise<void> {
     })
 
     await syncLiveThread(client, groups)
-    await syncPerStaffChannels(client, doc, groups)
-
-    const guild = await resolveGuild(client)
-    if (guild) await orderCategoryChannels(guild, doc, groups)
     logger.info('AsociacionesPanel: sync completada')
   } catch (error) {
     logger.error('AsociacionesPanel: error sincronizando paneles', {
@@ -1021,11 +666,6 @@ export async function syncPanels(client: Client): Promise<void> {
   } finally {
     syncPending = false
   }
-}
-
-async function loadPanelConfig(): Promise<AsociacionesPanelDocument> {
-  const doc = await AsociacionesPanel.findOne({ key: PANEL_KEY })
-  return doc ?? await AsociacionesPanel.create({ key: PANEL_KEY })
 }
 
 async function syncLiveThread(client: Client, groups: StaffGroup[]): Promise<void> {
@@ -1096,66 +736,3 @@ async function syncLiveThread(client: Client, groups: StaffGroup[]): Promise<voi
   if (edited > 1) logger.info('AsociacionesPanel: hilo en vivo actualizado', { mensajes: edited })
 }
 
-async function syncPerStaffChannels(client: Client, doc: AsociacionesPanelDocument, groups: StaffGroup[]): Promise<void> {
-  const guild = await resolveGuild(client)
-  if (!guild) return
-
-  // Canal de staff para cada asignado con asociaciones, y para "Sin asignar" si hay canales sueltos
-  const groupsWithChannel = groups.filter(g => g.items.length > 0)
-  logger.info('AsociacionesPanel: canales de staff a sincronizar', { cantidad: groupsWithChannel.length })
-  const activeIds = new Set(groupsWithChannel.map(g => g.staffId ?? 'sin-asignar'))
-  try {
-    await pruneStaffChannels(client, doc, activeIds)
-  } catch (error) {
-    // La limpieza no debe impedir la creación de canales
-    logger.warn('AsociacionesPanel: fallo al limpiar canales de staff obsoletos', {
-      reason: error instanceof Error ? error.message : 'Unknown error'
-    })
-  }
-
-  for (const group of groupsWithChannel) {
-    const staffIdKey = group.staffId ?? 'sin-asignar'
-    try {
-      const desiredName = staffChannelName(group.nombre)
-
-      let entry = doc.staffChannels.find(e => e.staffId === staffIdKey)
-      if (!entry) {
-        const result = await ensureStaffChannel(client, guild, doc, staffIdKey, desiredName, group.nombre)
-        if (!result.channelId) {
-          logger.warn('AsociacionesPanel: no se pudo crear el canal de staff', { staffId: staffIdKey, nombre: group.nombre })
-          continue
-        }
-        logger.info('AsociacionesPanel: canal de staff listo', {
-          staffId: staffIdKey,
-          channelId: result.channelId,
-          creado: result.created
-        })
-        entry = doc.staffChannels.find(e => e.staffId === staffIdKey)
-        if (!entry) continue
-      }
-
-      const channel = await client.channels.fetch(entry.channelId).catch(() => null)
-      if (!channel?.isTextBased()) continue
-      const textChannel = channel as TextChannel
-
-      if (textChannel.name !== desiredName) {
-        await textChannel.setName(desiredName, 'Sincronización del panel de staff').catch(() => {})
-      }
-
-      // Contenedor con el formato del bot viejo (header 📌 asignado, estado por asociación)
-      const containers = groupContainers(group)
-      const ids = await syncV2Channel(textChannel as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, containers, entry.messageIds ?? [])
-      if (entry.messageIds?.join(',') !== ids.join(',')) {
-        entry.messageIds = ids
-        doc.markModified('staffChannels')
-        await doc.save()
-      }
-    } catch (error) {
-      // Un fallo en un staff no debe abortar el resto de canales
-      logger.warn('AsociacionesPanel: fallo sincronizando canal de staff', {
-        staffId: staffIdKey,
-        reason: error instanceof Error ? error.message : 'Unknown error'
-      })
-    }
-  }
-}
