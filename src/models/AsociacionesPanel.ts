@@ -8,20 +8,12 @@ export interface StaffPanelEntry {
 
 export interface AsociacionesPanelConfig {
   key: string
-  // Mensajes "en vivo" del hilo de asociaciones (se re-renderizan en cada cambio)
-  liveMessageIds: string[]
-  // Canal privado para el staff, con una sección por staff y sus asociaciones
-  staffPanelChannelId: string
-  staffPanelMessageIds: string[]
-  // Canal por cada staff que tenga asociaciones
+  // Canal por cada staff que tenga asociaciones asignadas (y "sin-asignar" si hay canales sueltos)
   staffChannels: StaffPanelEntry[]
 }
 
 const panelSchema = new mongoose.Schema<AsociacionesPanelConfig>({
   key: { type: String, required: true, unique: true },
-  liveMessageIds: { type: [String], default: [] },
-  staffPanelChannelId: { type: String, default: null },
-  staffPanelMessageIds: { type: [String], default: [] },
   staffChannels: [{
     staffId: String,
     channelId: String,

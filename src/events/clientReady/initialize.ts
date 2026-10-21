@@ -1,6 +1,6 @@
 import mongoose from 'mongoose'
 import type { Event } from '#types/events'
-import { Client } from 'discord.js'
+import { ActivityType, Client } from 'discord.js'
 import { mongoURL } from '../../config/env'
 import logger from '../../utils/logger'
 import { publishServiceThreads } from '../../services/services'
@@ -28,16 +28,20 @@ export default {
       logger.info('Looking for file changes...\n')
     }
 
-    // Estado profesional del bot
+    // Estado profesional del bot (se aplica al arrancar y rota cada 15 min)
     const actividades = [
       '.gg/tscommunity',
-      '#TSCommunity',
+      '#TSCommunity'
     ]
 
-    setInterval(() => {
+    const setRandomStatus = () => {
       if (!client.user) return
-      const status = actividades[Math.floor(Math.random() * actividades.length)]
-      client.user.setActivity({ name: status, type: 3 })
-    }, 1000 * 60 * 15)
+      client.user.setPresence({
+        activities: [{ name: actividades[Math.floor(Math.random() * actividades.length)], type: ActivityType.Watching }]
+      })
+    }
+
+    setRandomStatus()
+    setInterval(setRandomStatus, 1000 * 60 * 15)
   }
 } satisfies Event<'clientReady'>

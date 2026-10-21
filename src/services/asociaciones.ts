@@ -337,8 +337,9 @@ export function buildAssociationDetailPayload(
 
 // Canal/hilo donde vive el panel "en vivo" del estado de asociaciones
 export const ASOCIACIONES_LIVE_THREAD_ID = '1562220631783903382'
+// Canal anfitrión del hilo en vivo (no se trata como asociación)
+export const ASOCIACIONES_THREAD_CHANNEL_ID = '1436773704980758548'
 // Nombre del canal privado del staff (posicionado en la categoría de asociaciones)
-export const STAFF_PANEL_NAME = '﹏︿panel-asociaciones︿﹏'
 // Iconos decorativos para los canales de staff (prefijo y sufijo) - formato compatible con Discord
 export const STAFF_CHANNEL_PREFIX = '﹏︿'
 export const STAFF_CHANNEL_SUFFIX = '︿﹏'
@@ -394,114 +395,109 @@ export function staffChannelName(nombre: string): string {
   return createDiscordChannelName(nombre)
 }
 
-export function associationBlock(a: AssociationBlockData): string {
-  const next = unix(a.nextRenovationDate)
-  return [
-    `### ${a.emoji} ${a.servidor} (<#${a.canalId}>)`,
-    `${EMOJI.representante} **Representante:** ${a.representanteId ? `<@${a.representanteId}>` : '*Sin asignar*'}`,
-    `${EMOJI.renovacion} **Frecuencia:** cada ${a.renovacionDias} días`,
-    `${EMOJI.proxima} **Próxima renovación:** <t:${next}:R>`
-  ].join('\n')
-}
-
-function textContainer(content: string): Container {
-  return new ContainerBuilder().setAccentColor(ASOCIACIONES_PANEL_COLOR)
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(content))
-}
-
-export const ASOCIACIONES_PANEL_COLOR = 0x9B4DFF
-
-function groupCard(
-  group: StaffGroup,
-  options: { hideHeader?: boolean, title?: string | null, trailer?: boolean } = {}
-): Container[] {
-  const headerText = options.hideHeader
-    ? null
-    : `${group.staffId ? `### ${EMOJI.staff} ${group.nombre}` : `### 💤 Sin asignar`} (${group.items.length})`
-
-  const trailerText = `-# Actualizado: <t:${unix(new Date())}:R>`
-
-  const blocks = group.items.map(associationBlock)
-  if (!blocks.length) {
-    const emptyLine = group.staffId ? '-# *Nada por ahora.*' : '-# *No hay ninguna asociación sin asignar.*'
-    const builder = new ContainerBuilder().setAccentColor(ASOCIACIONES_PANEL_COLOR)
-    if (options.title) {
-      builder.addTextDisplayComponents(new TextDisplayBuilder().setContent(options.title))
-      builder.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
-    }
-    if (headerText) builder.addTextDisplayComponents(new TextDisplayBuilder().setContent(headerText))
-    builder.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
-    builder.addTextDisplayComponents(new TextDisplayBuilder().setContent(emptyLine))
-    if (options.trailer) {
-      builder.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
-      builder.addTextDisplayComponents(new TextDisplayBuilder().setContent(trailerText))
-    }
-    return [builder]
+// Estado de renovación (lógica del bot viejo): ✅ renovada, ⚠️ expira en <= 2 días, ❌ sin renovar
+export function renewalState(nextRenovation: Date | string, now = Date.now()): { icon: string, diasRestantes: number } {
+  const nextMs = new Date(nextRenovation).getTime()
+  if (Number.isNaN(nextMs)) return { icon: '❌', diasRestantes: 0 }
+  const diasRestantes = (nextMs - now) / DAY_MS
+  return {
+    icon: diasRestantes > 0 && diasRestantes <= 2 ? '⚠️' : (diasRestantes > 2 ? '✅' : '❌'),
+    diasRestantes
   }
+}
+
+// Contenedores de un grupo de staff (diseño exacto del bot viejo: un mensaje V2 por asignado)
+function groupContainers(group: StaffGroup): Container[] {
+  const now = Date.now()
+  const assigned = group.staffId !== null
+  const accent = assigned ? 0x00b0f4 : 0xffcc00
+  const renovadas = group.items.filter(i => renewalState(i.nextRenovationDate, now).icon !== '❌').length
+  const header = assigned
+    ? `### 📌 <@${group.staffId}> — ${renovadas}/${group.items.length}`
+    : `### 📋 Sin asignar — ${group.items.length}`
 
   const containers: Container[] = []
+
+  if (!group.items.length) {
+    const empty = new ContainerBuilder().setAccentColor(accent)
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(header))
+      .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+        assigned ? '> *El usuario no tiene asociaciones asignadas.*' : '> *No hay asociaciones sin asignar.*'
+      ))
+    containers.push(empty)
+    return containers
+  }
+
   let builder: ContainerBuilder | null = null
   let length = 0
   let firstInCard = true
-  let titleInjected = false
 
   const startCard = () => {
-    builder = new ContainerBuilder().setAccentColor(ASOCIACIONES_PANEL_COLOR)
-    containers.push(builder)
-    length = 0
+    builder = new ContainerBuilder().setAccentColor(accent)
+    containers.push(builder!)
+    length = header.length
     firstInCard = true
-    if (!titleInjected && options.title) {
-      builder.addTextDisplayComponents(new TextDisplayBuilder().setContent(options.title))
-      builder.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
-      length += options.title.length
-      titleInjected = true
-    }
-    if (headerText) {
-      builder.addTextDisplayComponents(new TextDisplayBuilder().setContent(headerText))
-      length += headerText.length
-    }
+    builder!.addTextDisplayComponents(new TextDisplayBuilder().setContent(header))
   }
 
-  for (const block of blocks) {
-    if (!builder || length + block.length > MAX_CONTAINER_CHARS) startCard()
+  for (const item of group.items) {
+    const estado = renewalState(item.nextRenovationDate, now)
+    const content = assigned
+      ? [
+          `${estado.icon} — <#${item.canalId}>`,
+          `🗓️ <t:${unix(item.nextRenovationDate)}:R>`,
+          `${EMOJI.representante} ${item.representanteId ? `<@${item.representanteId}>` : '*Sin representante*'}`
+        ].join('\n')
+      : `${EMOJI.canal} <#${item.canalId}>`
+
+    if (!builder || length + content.length + 30 > MAX_CONTAINER_CHARS) startCard()
     const current = builder!
     if (!firstInCard) {
       current.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
     }
-    current.addTextDisplayComponents(new TextDisplayBuilder().setContent(block))
-    length += block.length
+    current.addTextDisplayComponents(new TextDisplayBuilder().setContent(content))
+    length += content.length + 30
     firstInCard = false
-  }
-
-  if (options.trailer && builder !== null) {
-    const last = builder as ContainerBuilder
-    last.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
-    last.addTextDisplayComponents(new TextDisplayBuilder().setContent(trailerText))
   }
 
   return containers
 }
 
-export function renderStaffCenter(
-  groups: StaffGroup[],
-  options: { title?: string, hideGroupHeaders?: boolean } = {}
-): Container[] {
-  const total = groups.reduce((sum, g) => sum + g.items.length, 0)
-  const title = options.title ?? `## ☕ Lista de Asociaciones (${total})`
+// Un mensaje V2 por grupo de staff (igual que createContainerForAsociation del bot viejo)
+export function renderStaffCenter(groups: StaffGroup[]): Container[] {
+  return groups.flatMap(groupContainers)
+}
 
-  if (!groups.length) {
-    return [textContainer(`${title}\n-# *Sin asociaciones registradas.*`)]
+// Embed resumen con estadísticas (igual que createSummaryEmbed del bot viejo)
+export function createSummaryEmbed(groups: StaffGroup[]): EmbedBuilder {
+  const now = Date.now()
+  const items = groups.flatMap(g => g.items)
+  const total = items.length
+  const sinAsignarCount = groups.filter(g => g.staffId === null).reduce((sum, g) => sum + g.items.length, 0)
+
+  let sinRenovar = 0
+  let vencenPronto = 0
+  for (const item of items) {
+    const { icon } = renewalState(item.nextRenovationDate, now)
+    if (icon === '❌') sinRenovar++
+    else if (icon === '⚠️') vencenPronto++
   }
+  const renovadas = total - sinRenovar
+  const porcentajeRenovacion = total > 0 ? Math.round((renovadas / total) * 100) : 0
 
-  const cards: Container[] = []
-  groups.forEach((group, index) => {
-    cards.push(...groupCard(group, {
-      hideHeader: options.hideGroupHeaders ?? false,
-      title: index === 0 ? title : null,
-      trailer: index === groups.length - 1
-    }))
-  })
-  return cards
+  return new EmbedBuilder()
+    .setDescription('## 🏠 Resumen de asociaciones')
+    .setColor(0x7289DA)
+    .addFields(
+      { name: '📈 Total', value: `\`${total}\``, inline: true },
+      { name: '📋 Sin asignar', value: `\`${sinAsignarCount}\``, inline: true },
+      { name: '📊 % Renovación', value: `\`${porcentajeRenovacion}%\``, inline: true },
+      { name: '✅ Renovadas', value: `\`${renovadas}\``, inline: true },
+      { name: '⚠️ Expiran en < 2 días', value: `\`${vencenPronto}\``, inline: true },
+      { name: '❌ Sin Renovar', value: `\`${sinRenovar}\``, inline: true }
+    )
+    .setTimestamp()
 }
 
 export function normalizeSortKey(input: string): string {
@@ -570,6 +566,30 @@ export async function fetchStaffGroups(client: Client): Promise<StaffGroup[]> {
     groups.push({ staffId: null, nombre: 'Sin asignar', items: [] })
   }
 
+  // Igual que en el bot viejo: los canales de la categoría que no están registrados en la DB aparecen en "Sin asignar"
+  const unassignedGroup = groups.find(g => g.staffId === null)
+  if (guild && unassignedGroup) {
+    const category = await guild.channels.fetch(ASOCIACIONES_CATEGORY_ID).catch(() => null)
+    if (category && category.type === ChannelType.GuildCategory) {
+      const registered = new Set(all.map(a => a.canalId))
+      const children = guild.channels.cache.filter(c => c.parentId === category.id) as unknown as Map<string, { id: string, type: number, name: string }>
+      for (const child of children.values()) {
+        if (child.type !== ChannelType.GuildText) continue
+        if (child.id === ASOCIACIONES_THREAD_CHANNEL_ID) continue
+        if (child.name.startsWith(STAFF_CHANNEL_PREFIX)) continue
+        if (registered.has(child.id)) continue
+        unassignedGroup.items.push({
+          servidor: cleanChannelName(child.name) || child.name,
+          canalId: child.id,
+          representanteId: null,
+          renovacionDias: 0,
+          nextRenovationDate: new Date(0),
+          emoji: emojiFromChannelName(child.name)
+        })
+      }
+    }
+  }
+
   staffCache = { at: Date.now(), groups }
   return groups
 }
@@ -590,6 +610,10 @@ function isV2(message: unknown): boolean {
   return (flags & BigInt(MessageFlags.IsComponentsV2)) !== 0n
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 // Compara la estructura de los componentes: si Discord la cambió/rompió hay que recrer & sustituir
 function compareMessageStructure(oldMessage: unknown, containers: Container[]): boolean {
   const msg = oldMessage as { components?: unknown[] } | null
@@ -606,22 +630,6 @@ async function deleteBotMessages(channel: { messages: { delete: (id: string) => 
   for (const id of ids) {
     await channel.messages.delete(id).catch(() => {})
   }
-}
-
-// Resumen compacto en embed clásico (fallback si falla Components V2)
-function createSummaryEmbed(groups: StaffGroup[]): EmbedBuilder {
-  const total = groups.reduce((sum, g) => sum + g.items.length, 0)
-  const sections = groups.map(g => {
-    const label = g.staffId ? g.nombre : 'Sin asignar'
-    const lines = g.items
-      .map(i => `${i.emoji} **${i.servidor}** — <t:${unix(i.nextRenovationDate)}:R>`)
-      .join('\n') || '*Nada por ahora.*'
-    return `${g.staffId ? EMOJI.staff : '💤'} **${label}** (${g.items.length})\n${lines}`
-  }).join('\n') || '*Sin asociaciones registradas.*'
-  return new EmbedBuilder()
-    .setColor(ASOCIACIONES_PANEL_COLOR)
-    .setTitle(`☕ Lista de Asociaciones (${total})`)
-    .setDescription(sections)
 }
 
 async function syncMessages(
@@ -695,45 +703,6 @@ async function syncV2Channel(
   return syncMessages(channel, containers, currentIds, fallback)
 }
 
-async function ensureStaffPanelChannel(client: Client, doc: AsociacionesPanelDocument): Promise<{ channel: { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } } | null, created: boolean }> {
-  if (doc.staffPanelChannelId) {
-    const channel = await client.channels.fetch(doc.staffPanelChannelId).catch(() => null)
-    if (channel?.isTextBased()) {
-      const textChannel = channel as TextChannel
-      if (textChannel.name !== STAFF_PANEL_NAME) {
-        await textChannel.setName(STAFF_PANEL_NAME, 'Corrección de nombre del panel de staff').catch(() => {})
-      }
-      return { channel: textChannel as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, created: false }
-    }
-  }
-
-const guild = client.guilds.cache.get(botGuildId) ?? await client.guilds.fetch(botGuildId).catch(() => null)
-  if (!guild) return { channel: null, created: false }
-
-  const category = await guild.channels.fetch(ASOCIACIONES_CATEGORY_ID).catch(() => null)
-  if (!category || category.type !== ChannelType.GuildCategory) {
-    logger.warn('AsociacionesPanel: categoría de asociaciones no disponible', { categoryId: ASOCIACIONES_CATEGORY_ID })
-    return { channel: null, created: false }
-  }
-
-  const config = await getGuildConfig()
-  const overwrites: { id: string, allow?: bigint[], deny?: bigint[] }[] = [
-    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }
-  ]
-  const created = await guild.channels.create({
-    name: STAFF_PANEL_NAME,
-    type: ChannelType.GuildText,
-    parent: category.id,
-    permissionOverwrites: overwrites as never
-  })
-
-  doc.staffPanelChannelId = created.id
-  doc.staffPanelMessageIds = []
-  await doc.save()
-  logger.info('AsociacionesPanel: canal privado del staff creado', { channelId: created.id })
-  return { channel: created as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, created: true }
-}
-
 async function resolveGuild(client: Client) {
   return client.guilds.cache.get(botGuildId) ?? await client.guilds.fetch(botGuildId).catch(() => null)
 }
@@ -749,6 +718,7 @@ async function findExistingStaffChannel(
   const children = guild.channels.cache.filter(c => c.parentId === category.id) as unknown as Map<string, { id: string, type: number, name: string }>
   for (const child of children.values()) {
     if (child.type !== ChannelType.GuildText) continue
+    if (!child.name.startsWith(STAFF_CHANNEL_PREFIX)) continue
     if (normalizeDiscordChannelName(child.name) === target) {
       return await guild.channels.fetch(child.id).catch(() => null) as unknown as TextChannel
     }
@@ -776,16 +746,20 @@ async function ensureStaffChannel(
   }
 
   const config = await getGuildConfig()
+  // Igual que en el bot viejo: staff y cazas pueden VER el canal y leer el historial, pero no escribir
+  const viewWithHistory = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory]
   const overwrites: { id: string, allow?: bigint[], deny?: bigint[] }[] = [
     { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }
   ]
   for (const roleId of config.staffRoleIds) {
-    overwrites.push({ id: roleId, allow: [PermissionFlagsBits.ViewChannel] })
+    overwrites.push({ id: roleId, allow: viewWithHistory, deny: [PermissionFlagsBits.SendMessages] })
   }
   for (const cazaRoleId of ALIANZAS_ROLE_IDS) {
-    overwrites.push({ id: cazaRoleId, allow: [PermissionFlagsBits.ViewChannel] })
+    overwrites.push({ id: cazaRoleId, allow: viewWithHistory, deny: [PermissionFlagsBits.SendMessages] })
   }
-  overwrites.push({ id: staffId, allow: [PermissionFlagsBits.ViewChannel] })
+  if (staffId !== 'sin-asignar') {
+    overwrites.push({ id: staffId, allow: viewWithHistory, deny: [PermissionFlagsBits.SendMessages] })
+  }
 
   const category = await guild.channels.fetch(ASOCIACIONES_CATEGORY_ID).catch(() => null)
   if (!category || category.type !== ChannelType.GuildCategory) {
@@ -823,6 +797,8 @@ async function ensureStaffChannel(
     name: desiredName,
     type: ChannelType.GuildText,
     parent: category.id,
+    topic: `📋 Canales asignados a ${staffDisplayName} (ID: ${staffId})`,
+    reason: 'Canal de organización por staff',
     permissionOverwrites: overwrites as never
   })
 
@@ -852,7 +828,7 @@ async function pruneStaffChannels(client: Client, doc: AsociacionesPanelDocument
   }
 
   if (!guild) return
-  const managedIds = new Set<string>([doc.staffPanelChannelId, ...doc.staffChannels.map(e => e.channelId)].filter(Boolean))
+  const managedIds = new Set<string>(doc.staffChannels.map(e => e.channelId).filter(Boolean))
   await cleanupObsoleteStaffChannels(guild, managedIds)
 }
 
@@ -885,45 +861,36 @@ async function orderCategoryChannels(
   const category = await guild.channels.fetch(ASOCIACIONES_CATEGORY_ID).catch(() => null)
   if (!category || category.type !== ChannelType.GuildCategory) return
 
-  type ChildChannel = { id: string, name: string, rawPosition: number }
+  type ChildChannel = { id: string, name: string, type: number, rawPosition: number }
   const children = guild.channels.cache.filter(c => c.parentId === category.id) as unknown as Map<string, ChildChannel>
-
-  const panelChannel = doc.staffPanelChannelId ? children.get(doc.staffPanelChannelId) : undefined
-
-  const assocByStaff: Map<string, { server: string, canalId: string }[]> = new Map()
-  for (const group of groups.filter(g => g.staffId)) {
-    assocByStaff.set(group.staffId!, group.items.map(item => ({ server: item.servidor, canalId: item.canalId })))
-  }
+  const byId = new Map([...children.values()].map(c => [c.id, c]))
 
   const target: ChildChannel[] = []
 
-  if (panelChannel) target.push(panelChannel)
+  // Cada staff agrupado con sus canales, alfabético (igual que organizaPorStaff del bot viejo); Sin asignar al final
+  const sortedGroups = [...groups].sort((a, b) => {
+    if (!a.staffId) return 1
+    if (!b.staffId) return -1
+    return compareNames(a.nombre, b.nombre)
+  })
 
-  const sortedStaffGroups = [...groups.filter(g => g.staffId)].sort((a, b) => compareNames(a.nombre, b.nombre))
-
-  for (const group of sortedStaffGroups) {
-    const entry = doc.staffChannels.find(e => e.staffId === group.staffId)
-    const staffChannel = entry ? children.get(entry.channelId) : undefined
+  for (const group of sortedGroups) {
+    const staffIdKey = group.staffId ?? 'sin-asignar'
+    const entry = doc.staffChannels.find(e => e.staffId === staffIdKey)
+    const staffChannel = entry ? byId.get(entry.channelId) : undefined
     if (staffChannel) target.push(staffChannel)
 
-    const assocs = assocByStaff.get(group.staffId!) || []
-    const assocChannels = [...children.values()]
-      .filter(c => assocs.some(a => a.canalId === c.id))
-      .sort((a, b) => compareNames(assocByStaff.get(group.staffId!)!.find(x => x.canalId === a.id)!.server, assocByStaff.get(group.staffId!)!.find(x => x.canalId === b.id)!.server))
+    // Canales asignados a ese staff, ordenados alfabéticamente por nombre de canal
+    const canalIds = new Set(group.items.map(i => i.canalId))
+    const assocChannels = [...byId.values()]
+      .filter(c => canalIds.has(c.id))
+      .sort((a, b) => cleanChannelName(a.name).localeCompare(cleanChannelName(b.name), 'es', { sensitivity: 'base', numeric: true }))
     target.push(...assocChannels)
   }
 
-  const sinAsignar = groups.find(g => !g.staffId)
-  if (sinAsignar) {
-    const assocChannels = [...children.values()]
-      .filter(c => sinAsignar.items.some(item => item.canalId === c.id))
-      .sort((a, b) => compareNames(sinAsignar.items.find(i => i.canalId === a.id)!.servidor, sinAsignar.items.find(i => i.canalId === b.id)!.servidor))
-    target.push(...assocChannels)
-  }
-
-  const managedIds = new Set<string>([doc.staffPanelChannelId, ...doc.staffChannels.map(e => e.channelId)].filter(Boolean))
+  const managedIds = new Set<string>([...doc.staffChannels.map(e => e.channelId), ...target.map(t => t.id)].filter(Boolean))
   const others = [...children.values()]
-    .filter(c => !managedIds.has(c.id))
+    .filter(c => !managedIds.has(c.id) && c.type === ChannelType.GuildText)
     .sort((a, b) => a.rawPosition - b.rawPosition)
   target.push(...others)
 
@@ -969,7 +936,6 @@ export async function syncPanels(client: Client): Promise<void> {
     const groups = await fetchStaffGroups(client)
 
     await syncLiveThread(client, groups)
-    await syncStaffPanel(client, doc, groups)
     await syncPerStaffChannels(client, doc, groups)
 
     const guild = await resolveGuild(client)
@@ -989,30 +955,56 @@ async function loadPanelConfig(): Promise<AsociacionesPanelDocument> {
 }
 
 async function syncLiveThread(client: Client, groups: StaffGroup[]): Promise<void> {
+  if (!client.user) return
   const thread = await client.channels.fetch(ASOCIACIONES_LIVE_THREAD_ID).catch(() => null)
   if (!thread || !('isThread' in thread) || !thread.isThread()) {
     logger.warn('AsociacionesPanel: no se encontró el hilo en vivo de asociaciones', { threadId: ASOCIACIONES_LIVE_THREAD_ID })
     return
   }
 
-  const doc = await loadPanelConfig()
-  const containers = renderStaffCenter(groups)
-  const ids = await syncV2Channel(thread as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, containers, doc.liveMessageIds ?? [], [createSummaryEmbed(groups)])
-  doc.liveMessageIds = ids
-  doc.markModified('liveMessageIds')
-  await doc.save()
-}
+  type MessageLike = { id: string, author: { id: string }, createdTimestamp: number, flags: number | bigint, edit: (p?: unknown) => Promise<unknown>, delete: (r?: string) => Promise<unknown> }
+  type ThreadLike = { messages: { fetch: (opts: { limit: number }) => Promise<Map<string, MessageLike>> }, send: (p: Record<string, unknown>) => Promise<unknown> }
 
-async function syncStaffPanel(client: Client, doc: AsociacionesPanelDocument, groups: StaffGroup[]): Promise<void> {
-  const { channel } = await ensureStaffPanelChannel(client, doc)
-  if (!channel) return
+  const t = thread as unknown as ThreadLike
+  const fetched = await t.messages.fetch({ limit: 100 }).catch(() => null)
+  if (!fetched) return
+  const botMsgs = Array.from(fetched.values())
+    .filter(m => m.author.id === client.user!.id)
+    .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
 
+  // Igual que en el bot viejo: el resumen es el único mensaje clásico, el resto son V2 (uno por asignado)
+  const summary = botMsgs.find(m => !isV2(m))
+  const v2s = botMsgs.filter(m => isV2(m))
   const containers = renderStaffCenter(groups)
-  const ids = await syncV2Channel(channel, containers, doc.staffPanelMessageIds ?? [], [createSummaryEmbed(groups)])
-  if (doc.staffPanelMessageIds!.join(',') !== ids.join(',')) {
-    doc.staffPanelMessageIds = ids
-    doc.markModified('staffPanelMessageIds')
-    await doc.save()
+
+  // Si falta el resumen o cambió el número de secciones V2: borrar TODO y recrear
+  const structureChanged = !summary || v2s.length !== containers.length
+  if (structureChanged) {
+    for (const msg of botMsgs) {
+      await (msg as unknown as { delete: (r?: string) => Promise<unknown> }).delete().catch(() => {})
+      await sleep(100)
+    }
+    try {
+      await (t.send as (p: { embeds: EmbedBuilder[] }) => Promise<unknown>)({ embeds: [createSummaryEmbed(groups)] })
+      await sleep(200)
+      for (const container of containers) {
+        await (t.send as (p: { flags: number, components: Container[] }) => Promise<unknown>)({ flags: MessageFlags.IsComponentsV2, components: [container] })
+        await sleep(200)
+      }
+    } catch (error) {
+      logger.warn('AsociacionesPanel: fallo recreando la lista de asociaciones', {
+        message: error instanceof Error ? error.message : 'Unknown error'
+      })
+    }
+    logger.info('AsociacionesPanel: lista de asociaciones recreada en el hilo', { secciones: containers.length })
+    return
+  }
+
+  // Estructura intacta: solo actualizar contenido
+  await (summary as unknown as { edit: (p: { embeds: EmbedBuilder[] }) => Promise<unknown> }).edit({ embeds: [createSummaryEmbed(groups)] }).catch(() => {})
+  for (let i = 0; i < containers.length; i++) {
+    await (v2s[i] as unknown as { edit: (p: unknown) => Promise<unknown> }).edit({ flags: MessageFlags.IsComponentsV2, components: [containers[i]] }).catch(() => {})
+    await sleep(150)
   }
 }
 
@@ -1020,19 +1012,21 @@ async function syncPerStaffChannels(client: Client, doc: AsociacionesPanelDocume
   const guild = await resolveGuild(client)
   if (!guild) return
 
-  const staffWithItems = groups.filter(g => g.staffId && g.items.length > 0)
-  const activeIds = new Set(staffWithItems.map(g => g.staffId!))
+  // Canal de staff para cada asignado con asociaciones, y para "Sin asignar" si hay canales sueltos
+  const groupsWithChannel = groups.filter(g => g.items.length > 0)
+  const activeIds = new Set(groupsWithChannel.map(g => g.staffId ?? 'sin-asignar'))
   await pruneStaffChannels(client, doc, activeIds)
 
-  for (const group of staffWithItems) {
+  for (const group of groupsWithChannel) {
+    const staffIdKey = group.staffId ?? 'sin-asignar'
     const desiredName = staffChannelName(group.nombre)
 
-    let entry = doc.staffChannels.find(e => e.staffId === group.staffId)
+    let entry = doc.staffChannels.find(e => e.staffId === staffIdKey)
     if (!entry) {
-      await ensureStaffChannel(client, guild, doc, group.staffId!, desiredName, group.nombre)
-      entry = doc.staffChannels.find(e => e.staffId === group.staffId)
+      await ensureStaffChannel(client, guild, doc, staffIdKey, desiredName, group.nombre)
+      entry = doc.staffChannels.find(e => e.staffId === staffIdKey)
       if (!entry) {
-        logger.warn('AsociacionesPanel: no se pudo crear el canal de staff', { staffId: group.staffId })
+        logger.warn('AsociacionesPanel: no se pudo crear el canal de staff', { staffId: staffIdKey })
         continue
       }
     }
@@ -1045,11 +1039,9 @@ async function syncPerStaffChannels(client: Client, doc: AsociacionesPanelDocume
       await textChannel.setName(desiredName, 'Sincronización del panel de staff').catch(() => {})
     }
 
-    const containers = renderStaffCenter([group], {
-      title: `## ☕ Asociaciones de ${group.nombre} (${group.items.length})`,
-      hideGroupHeaders: true
-    })
-    const ids = await syncV2Channel(textChannel as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, containers, entry.messageIds ?? [], [createSummaryEmbed([group])])
+    // Contenedor con el formato exacto del bot viejo (header 📌 asignado — r/n, estado por asociación)
+    const containers = groupContainers(group)
+    const ids = await syncV2Channel(textChannel as unknown as { id: string; isTextBased(): boolean; messages: { fetch: (id: string) => Promise<{ id: string, edit: (p?: unknown) => Promise<unknown> }>; delete: (id: string) => Promise<unknown>; send: (payload: { flags: number, components: Container[] }) => Promise<{ id: string }> } }, containers, entry.messageIds ?? [])
     if (entry.messageIds?.join(',') !== ids.join(',')) {
       entry.messageIds = ids
       doc.markModified('staffChannels')
