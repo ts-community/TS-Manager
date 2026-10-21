@@ -1,5 +1,5 @@
 import type { Event } from '#types/events'
-import { schedulePanelsSync } from '../../services/asociaciones'
+import { schedulePanelsSync } from '../../services/asociaciones-sync'
 
 export default {
   once: true,

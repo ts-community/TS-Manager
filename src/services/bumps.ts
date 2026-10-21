@@ -13,7 +13,7 @@ export const BUMP_SERVICES: Record<BumpService, { label: string, cooldownMs: num
 }
 
 // Rol que se menciona en el aviso y comando /bump de Disboard (mención clicable)
-const BUMP_ROLE_ID = '1562101130341908582'
+const BUMP_ROLE_ID = '1173666252686893077'
 const DISBOARD_BUMP_COMMAND_ID = '947088344167366698'
 
 const MENTION_REGEX = /<@!?(\d+)>/
@@ -90,7 +90,7 @@ export async function registerBump(message: Message, service: BumpService, bumpe
   const nextBumpUnix = Math.floor((bumpTime + cooldownMs) / 1000)
 
   await message.channel.send({
-    content: `🎉 ¡Gracias por bumpear el servidor, <@${bumperId}>! El próximo bump estará disponible <t:${nextBumpUnix}:R>.`,
+    content: `¡Gracias por bumpear el servidor, <@${bumperId}>, se te recordara de nuevo <t:${nextBumpUnix}:R>!`,
     allowedMentions: { users: [bumperId] }
   })
 }

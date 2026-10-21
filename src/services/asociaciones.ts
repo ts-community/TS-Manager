@@ -75,14 +75,36 @@ export function cleanChannelName(rawName: string): string {
     .trim()
 }
 
-// Convierte un nombre de staff a "fuente normal": aplica NFKC (convierte fullwidth/matemáticas a ASCII),
-// quita emojis y selectores de variación, y normaliza espacios.
+// Convierte un nombre de staff a formato compatible con Discord (normalización que hace Discord automáticamente)
 export function normalizeStaffName(name: string): string {
   return name
-    .normalize('NFKC')
-    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, ' ')
-    .replace(/\s+/g, ' ')
+    .toLowerCase()
+    .normalize('NFD') // Descompone acentos
+    .replace(/[\u0300-\u036f]/g, '') // Elimina diacríticos (acentos)
+    // Reemplazar caracteres que Discord elimina por guiones o nada
+    .replace(/[|()[\]{}]/g, '') // Eliminar paréntesis, corchetes, llaves, pipes
+    .replace(/[^\w\s\-_.~]/g, '') // Solo caracteres que Discord permite
+    .replace(/\s+/g, '-') // Espacios → guiones
+    .replace(/-+/g, '-') // Múltiples guiones → uno solo
+    .replace(/^-|-$/g, '') // Quita guiones al inicio/final
     .trim()
+}
+
+// Aplica la misma normalización que Discord hace automáticamente a los nombres de canales
+export function normalizeDiscordChannelName(channelName: string): string {
+  return channelName
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\-_.~]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 100)
+}
+
+// Crea el nombre final del canal como lo creará Discord (prefijo + nombre normalizado + sufijo)
+export function createDiscordChannelName(staffDisplayName: string): string {
+  const normalizedName = normalizeStaffName(staffDisplayName)
+  return `${STAFF_CHANNEL_PREFIX}${normalizeDiscordChannelName(normalizedName)}${STAFF_CHANNEL_SUFFIX}`
 }
 
 // Nombre display a partir del canal: "「❤」el-sotano-oficial" -> "El Sotano Oficial"
@@ -317,9 +339,9 @@ export function buildAssociationDetailPayload(
 export const ASOCIACIONES_LIVE_THREAD_ID = '1562220631783903382'
 // Nombre del canal privado del staff (posicionado en la categoría de asociaciones)
 export const STAFF_PANEL_NAME = '₊୧ panel-asociaciones ୨₊'
-// Iconos decorativos para los canales de staff (prefijo y sufijo)
-export const STAFF_CHANNEL_PREFIX = '₊୧ '
-export const STAFF_CHANNEL_SUFFIX = ' ୨₊'
+// Iconos decorativos para los canales de staff (prefijo y sufijo) - formato compatible con Discord
+export const STAFF_CHANNEL_PREFIX = '﹏︿'
+export const STAFF_CHANNEL_SUFFIX = '︿﹏'
 // Roles encargados de alianzas / cazas (IDs configurados)
 export const ALIANZAS_ROLE_IDS = [
   '1170449867823382649',
@@ -369,8 +391,7 @@ function emojiFromChannelName(channelName: string | undefined): string {
 }
 
 export function staffChannelName(nombre: string): string {
-  const clean = normalizeStaffName(nombre) || 'staff'
-  return `${STAFF_CHANNEL_PREFIX}${clean}${STAFF_CHANNEL_SUFFIX}`
+  return createDiscordChannelName(nombre)
 }
 
 export function associationBlock(a: AssociationBlockData): string {

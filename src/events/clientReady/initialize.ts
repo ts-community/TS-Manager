@@ -4,7 +4,7 @@ import { Client } from 'discord.js'
 import { mongoURL } from '../../config/env'
 import logger from '../../utils/logger'
 import { publishServiceThreads } from '../../services/services'
-import { schedulePanelsSync } from '../../services/asociaciones'
+import { schedulePanelsSync } from '../../services/asociaciones-sync'
 
 export default {
   once: true,
@@ -31,8 +31,8 @@ export default {
 
     // Estado profesional del bot
     const actividades = [
-      '.gg/tscomunity',
-      '#TSComunity',
+      '.gg/tscommunity',
+      '#TSCommunity',
     ]
 
     setInterval(() => {
