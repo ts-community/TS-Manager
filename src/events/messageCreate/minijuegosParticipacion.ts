@@ -1,7 +1,7 @@
 import { ChannelType, type AnyThreadChannel, type Client, type Message } from 'discord.js'
 import type { Event } from '../../types/events'
 import Minijuego from '../../models/Minijuego'
-import { mlParticipation } from '../../ml'
+import { mlParticipation } from '../../ml/index'
 
 export const MINIJUEGOS_CHANNEL_ID = '1552390158081331419'
 

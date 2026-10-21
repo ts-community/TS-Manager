@@ -8,5 +8,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   outDir: "dist",
-  onSuccess: "node scripts/fix-esm-imports.mjs"
+  onSuccess: "node scripts/fix-esm-imports.mjs && node scripts/copy-assets.mjs"
 })

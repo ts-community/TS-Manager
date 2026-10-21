@@ -4,7 +4,7 @@ import {
   BUSCAR_EQUIPO_CHANNEL_ID,
   BUSCAR_EQUIPO_ROLE_ID
 } from '../../services/buscarEquipo'
-import { mlTeamSearch } from '../../ml'
+import { mlTeamSearch } from '../../ml/index'
 
 const PING_COOLDOWN_MS = 10 * 60 * 1000
 const MAX_TEXT_LENGTH = 500

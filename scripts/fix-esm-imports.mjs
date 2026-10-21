@@ -14,6 +14,15 @@ function addExtension(specifier) {
   return /\.[a-zA-Z0-9]+$/.test(specifier) ? specifier : `${specifier}.js`
 }
 
+// Node ESM requiere un atributo de importación explícito para JSON; tsx lo tolera
+// en dev pero node en producción no, así que añadimos `with { type: "json" }`.
+function decorate(specifier) {
+  const withExtension = addExtension(specifier)
+  return withExtension.endsWith('.json')
+    ? [withExtension, ' with { type: "json" }']
+    : [withExtension, '']
+}
+
 function walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const fullPath = path.join(dir, entry.name)
@@ -24,9 +33,10 @@ function walk(dir) {
     if (!entry.name.endsWith('.js')) continue
 
     const content = fs.readFileSync(fullPath, 'utf8')
-    const fixed = content.replace(specifierPattern, (match, prefix, specifier, suffix) => (
-      `${prefix}${addExtension(specifier)}${suffix}`
-    ))
+    const fixed = content.replace(specifierPattern, (match, prefix, specifier, suffix) => {
+      const [withExtension, attribute] = decorate(specifier)
+      return `${prefix}${withExtension}${suffix}${attribute}`
+    })
 
     if (fixed !== content) fs.writeFileSync(fullPath, fixed)
   }
