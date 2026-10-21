@@ -482,9 +482,9 @@ function groupContainers(group: StaffGroup): Container[] {
     const estado = renewalState(item.nextRenovationDate, now)
     const content = assigned
       ? [
-          `${estado.icon} <#${item.canalId}>`,
-          `${EMOJI.proxima} Próxima Renovación: <t:${unix(item.nextRenovationDate)}:R>`,
-          `${EMOJI.representante} Representante: ${item.representanteId ? `<@${item.representanteId}>` : '*Sin representante*'}`
+          `**${estado.icon} Canal:** <#${item.canalId}>`,
+          `**${EMOJI.proxima} Próxima Renovación:** <t:${unix(item.nextRenovationDate)}:R>`,
+          `**${EMOJI.representante} Representante:** ${item.representanteId ? `<@${item.representanteId}>` : '*Sin representante*'}`
         ].join('\n')
       : `${EMOJI.canal} <#${item.canalId}>`
 
@@ -1003,12 +1003,17 @@ export async function syncPanels(client: Client): Promise<void> {
     invalidateStaffCache()
     const doc = await loadPanelConfig()
     const groups = await fetchStaffGroups(client)
+    logger.info('AsociacionesPanel: sync iniciada', {
+      grupos: groups.length,
+      conAsignaciones: groups.filter(g => g.items.length > 0).length
+    })
 
     await syncLiveThread(client, groups)
     await syncPerStaffChannels(client, doc, groups)
 
     const guild = await resolveGuild(client)
     if (guild) await orderCategoryChannels(guild, doc, groups)
+    logger.info('AsociacionesPanel: sync completada')
   } catch (error) {
     logger.error('AsociacionesPanel: error sincronizando paneles', {
       message: error instanceof Error ? error.message : 'Unknown error'
@@ -1097,8 +1102,16 @@ async function syncPerStaffChannels(client: Client, doc: AsociacionesPanelDocume
 
   // Canal de staff para cada asignado con asociaciones, y para "Sin asignar" si hay canales sueltos
   const groupsWithChannel = groups.filter(g => g.items.length > 0)
+  logger.info('AsociacionesPanel: canales de staff a sincronizar', { cantidad: groupsWithChannel.length })
   const activeIds = new Set(groupsWithChannel.map(g => g.staffId ?? 'sin-asignar'))
-  await pruneStaffChannels(client, doc, activeIds)
+  try {
+    await pruneStaffChannels(client, doc, activeIds)
+  } catch (error) {
+    // La limpieza no debe impedir la creación de canales
+    logger.warn('AsociacionesPanel: fallo al limpiar canales de staff obsoletos', {
+      reason: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
 
   for (const group of groupsWithChannel) {
     const staffIdKey = group.staffId ?? 'sin-asignar'
@@ -1107,12 +1120,18 @@ async function syncPerStaffChannels(client: Client, doc: AsociacionesPanelDocume
 
       let entry = doc.staffChannels.find(e => e.staffId === staffIdKey)
       if (!entry) {
-        await ensureStaffChannel(client, guild, doc, staffIdKey, desiredName, group.nombre)
-        entry = doc.staffChannels.find(e => e.staffId === staffIdKey)
-        if (!entry) {
-          logger.warn('AsociacionesPanel: no se pudo crear el canal de staff', { staffId: staffIdKey })
+        const result = await ensureStaffChannel(client, guild, doc, staffIdKey, desiredName, group.nombre)
+        if (!result.channelId) {
+          logger.warn('AsociacionesPanel: no se pudo crear el canal de staff', { staffId: staffIdKey, nombre: group.nombre })
           continue
         }
+        logger.info('AsociacionesPanel: canal de staff listo', {
+          staffId: staffIdKey,
+          channelId: result.channelId,
+          creado: result.created
+        })
+        entry = doc.staffChannels.find(e => e.staffId === staffIdKey)
+        if (!entry) continue
       }
 
       const channel = await client.channels.fetch(entry.channelId).catch(() => null)
