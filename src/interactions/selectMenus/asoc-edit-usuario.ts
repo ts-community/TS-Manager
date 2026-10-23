@@ -7,12 +7,12 @@ import { hasPermission } from '../../services/permissions'
 export default {
   async execute(interaction: UserSelectMenuInteraction): Promise<void> {
     if (!await hasPermission(interaction, 'staff')) {
-      return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.', ephemeral: true })
+      return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.' })
     }
 
     const [, campo, asociacionId] = interaction.customId.split(':')
     const asociacion = await Asociacion.findById(asociacionId)
-    if (!asociacion || !campo) return void interaction.reply({ content: 'Esta asociación ya no existe.', ephemeral: true })
+    if (!asociacion || !campo) return void interaction.reply({ content: 'Esta asociación ya no existe.' })
 
     const usuarioId = interaction.values[0]
     if (campo === 'representante') asociacion.representanteId = usuarioId

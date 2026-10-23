@@ -16,7 +16,7 @@ const POSTULACIONES_CHANNEL_ID = '1153043300081737828'
 const POSTULACIONES_EMBED_TITLE = 'Postulaciones de TS Community Brawl'
 
 async function resolveUser(guild: Guild, rawValue: string): Promise<GuildMember | null> {
-  const userID = rawValue.replaceAll('>', '').trim()
+  const userID = rawValue.replace(/[<@!>]/g, '').trim()
   if (!userID) return null
 
   if (guild.members.cache.has(userID)) {

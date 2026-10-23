@@ -8,7 +8,7 @@ import {
   type StringSelectMenuInteraction
 } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
-import { schedulePanelsSync, buildEditorPayload } from '../../services/asociaciones'
+import { schedulePanelsSync, buildEditorPayload, capitalizeName } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
 // Editor de campos de una asociación (solo staff). CustomId: asoc-edit-campo:{asociacionId}
@@ -17,10 +17,10 @@ export default {
     const asociacionId = interaction.customId.split(':')[1]
     const campo = interaction.values[0]
     const asociacion = await Asociacion.findById(asociacionId)
-    if (!asociacion) return void interaction.reply({ content: 'Esta asociación ya no existe.', ephemeral: true })
+    if (!asociacion) return void interaction.reply({ content: 'Esta asociación ya no existe.' })
 
     if (!await hasPermission(interaction, 'staff')) {
-      return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.', ephemeral: true })
+      return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.' })
     }
 
     switch (campo) {
@@ -35,7 +35,7 @@ export default {
               .setStyle(TextInputStyle.Short)
               .setRequired(true)
               .setMaxLength(64)
-              .setValue(asociacion.servidor)
+              .setValue(capitalizeName(asociacion.servidor))
           ))
         return void interaction.showModal(modal)
       }

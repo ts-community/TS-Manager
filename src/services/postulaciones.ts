@@ -93,6 +93,8 @@ export async function handlePostulacionSubmit(interaction: ModalSubmitInteractio
       return
     }
 
+    await interaction.deferUpdate()
+
     const author = guild.members.cache.get(interaction.user.id) ?? (await guild.members.fetch(interaction.user.id).catch(() => null))
     const authorName = author?.displayName ?? interaction.user.username
     const authorAvatar = interaction.user.displayAvatarURL({ size: 256 })
@@ -118,7 +120,12 @@ export async function handlePostulacionSubmit(interaction: ModalSubmitInteractio
 
     const dmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(serverButton)
 
-    await member.send({ content: `<@${userID}>`, embeds: [dmEmbed], components: [dmRow] })
+    try {
+      await member.send({ content: `<@${userID}>`, embeds: [dmEmbed], components: [dmRow] })
+    } catch {
+      await interaction.followUp({ content: 'A ocurrido un error al contactar con el usuario', ephemeral: true }).catch(() => null)
+      return
+    }
 
     const postEmbed = new EmbedBuilder()
       .setTitle('Revisión de la Postulación')
@@ -143,14 +150,13 @@ export async function handlePostulacionSubmit(interaction: ModalSubmitInteractio
     )
 
     await interaction.message?.edit({ embeds: [postEmbed], components: [disabledRow], allowedMentions: { users: [userID] } }).catch(() => null)
-    await interaction.deferUpdate()
   } catch (error) {
     logger.error('Postulación submit failed', {
       message: error instanceof Error ? error.message : 'Unknown error'
     })
 
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: 'A ocurrido un error al contactar con el usuario', ephemeral: true })
+      await interaction.reply({ content: 'A ocurrido un error al contactar con el usuario', ephemeral: true }).catch(() => null)
     }
   }
 }

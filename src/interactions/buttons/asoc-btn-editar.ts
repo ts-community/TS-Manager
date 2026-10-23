@@ -7,10 +7,10 @@ import { hasPermission } from '../../services/permissions'
 export default {
   async execute(interaction: ButtonInteraction): Promise<void> {
     const asociacion = await Asociacion.findById(interaction.customId.split(':')[1])
-    if (!asociacion) return void interaction.reply({ content: 'Esta asociación ya no existe.', ephemeral: true })
+    if (!asociacion) return void interaction.reply({ content: 'Esta asociación ya no existe.' })
 
     if (!await hasPermission(interaction, 'staff')) {
-      return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.', ephemeral: true })
+      return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.' })
     }
 
     await interaction.update(buildEditorPayload(asociacion))

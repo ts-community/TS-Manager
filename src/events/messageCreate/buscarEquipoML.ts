@@ -70,7 +70,7 @@ export default {
     markPing(message.author.id)
 
     await message.reply({
-      content: `**[${message.member?.displayName ?? message.author.username}]** ${truncate(content, MAX_REPLY_CONTENT_LENGTH)}\n<@&${BUSCAR_EQUIPO_ROLE_ID}>`,
+      content: `**[${message.member?.displayName ?? message.author.username}]** ${truncate(content, MAX_REPLY_CONTENT_LENGTH)} <@&${BUSCAR_EQUIPO_ROLE_ID}>`,
       allowedMentions: {
         roles: [BUSCAR_EQUIPO_ROLE_ID]
       }

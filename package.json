@@ -5,9 +5,9 @@
   "description": "Discord bot template for private servers",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "NODE_ENV=development tsx watch src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "build": "tsup",
-    "start": "NODE_ENV=production pm2 start ecosystem.config.cjs"
+    "start": "pm2 start ecosystem.config.cjs"
   },
   "keywords": [
     "discord",

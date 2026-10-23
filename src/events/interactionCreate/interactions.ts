@@ -1,4 +1,5 @@
 import { EmbedBuilder } from 'discord.js'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { Event } from '../../types/events'
@@ -10,6 +11,7 @@ const __dirname = path.dirname(__filename)
 async function importHandler(folder: string, name: string) {
   for (const extension of ['.ts', '.js']) {
     const handlerPath = path.join(__dirname, '../../interactions', folder, `${name}${extension}`)
+    if (!fs.existsSync(handlerPath)) continue
     const handler = await import(pathToFileURL(handlerPath).href)
     return handler.default
   }

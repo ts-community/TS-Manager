@@ -1,8 +1,6 @@
 import {
   ActionRowBuilder,
   ChannelType,
-  MessageFlags,
-  PermissionFlagsBits,
   SlashCommandBuilder,
   StringSelectMenuBuilder,
   UserSelectMenuBuilder,
@@ -12,10 +10,12 @@ import {
 } from 'discord.js'
 import type { SlashCommand } from '../../../types/commands'
 import Asociacion from '../../../models/Asociacion'
-import { hasPermission } from '../../../services/permissions'
 import {
   buildAssociationDetailPayload,
+  buildAssociationsListPayload,
+  buildMessageCard,
   buildRemoveConfirmPayload,
+  capitalizeName,
   schedulePanelsSync,
   sendAsociacionesLog
 } from '../../../services/asociaciones'
@@ -47,12 +47,13 @@ async function buildAsociacionesStaffPayload(
 ): Promise<unknown> {
   const member = await interaction.guild!.members.fetch(memberId).catch(() => null)
   const asociaciones = await Asociacion.find({ staffEncargadoId: memberId }).sort({ servidor: 1 })
+  const staffName = member?.displayName ?? `<@${memberId}>`
 
   if (!asociaciones.length) {
     return {
       embeds: [greenEmbed()
         .setTitle(`${EMOJI.asociacion} Sin asociaciones`)
-        .setDescription(`**${member?.displayName ?? memberId}** todavía no participa en ninguna asociación.`)
+        .setDescription(`**${staffName}** todavía no participa en ninguna asociación.`)
         .setTimestamp()
       ],
       components: []
@@ -60,36 +61,25 @@ async function buildAsociacionesStaffPayload(
   }
 
   if (asociaciones.length === 1) {
-    const unique = asociaciones[0]
-    return buildAssociationDetailPayload(unique, {
-      canEdit: await hasPermission(interaction, 'staff'),
-      canDelete: interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ?? false
-    })
+    return buildAssociationDetailPayload(asociaciones[0], { canEdit: true, canDelete: true })
   }
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(ASOCIACION_MENU_ID)
-    .setPlaceholder('Selecciona una asociación para verla')
+    .setPlaceholder('Selecciona una asociación para ver su información')
   for (const a of asociaciones.slice(0, 25)) {
-    menu.addOptions({ label: a.servidor, value: a.id.toString() })
+    menu.addOptions({ label: capitalizeName(a.servidor).slice(0, 100), value: a.id.toString() })
   }
 
-  const embed = greenEmbed()
-    .setTitle(`${EMOJI.asociacion} Asociaciones de ${member?.displayName ?? memberId}`)
-    .setDescription(
-      asociaciones
-        .slice(0, 25)
-        .map(a => {
-          const next = unix(a.nextRenovationDate)
-          return `${EMOJI.servidor} **${a.servidor}** (<#${a.canalId}>)\n` +
-            `${EMOJI.renovacion} Frecuencia: cada ${a.renovacionDias} días · ${EMOJI.proxima} Next: <t:${next}:d> (<t:${next}:R>)`
-        })
-        .join('\n\n') +
-      (asociaciones.length > 25 ? `\n-# Mostrando 25 de ${asociaciones.length}.` : '')
-    )
-    .setTimestamp()
+  return buildAssociationsListPayload(asociaciones, {
+    title: `Asociaciones de ${staffName}`,
+    subtitle: `${asociaciones.length} asociaciones`,
+    menu
+  })
+}
 
-  return { embeds: [embed], components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)] }
+async function findAsociacion(value: string) {
+  return await Asociacion.findById(value) ?? await Asociacion.findOne(servidorFilter(value))
 }
 
 export default {
@@ -99,11 +89,11 @@ export default {
     .addSubcommand(sub =>
       sub
         .setName('mostrar')
-        .setDescription('Ver una asociación concreta, o las de un staff/miembro con menú interactivo')
+        .setDescription('Muestra la información de una asociación o de las que gestiona un staff')
         .addStringOption(o =>
           o
-            .setName('servidor')
-            .setDescription('Ver una asociación concreta (busca por nombre)')
+            .setName('asociacion')
+            .setDescription('Ver una asociación concreta (búsqueda por nombre)')
             .setRequired(false)
             .setAutocomplete(true)
         )
@@ -112,7 +102,7 @@ export default {
     .addSubcommand(sub =>
       sub
         .setName('crear')
-        .setDescription('Crear una asociación nueva o adosar un canal ya existente (Solo Staff)')
+        .setDescription('Crea una asociación nueva o adosa un canal ya existente')
         .addUserOption(o => o.setName('representante').setDescription('Representante de la asociación').setRequired(true))
         .addIntegerOption(o => o.setName('tiempo-renovacion').setDescription('Días entre renovaciones').setMinValue(1).setMaxValue(365).setRequired(true))
         .addStringOption(o => o.setName('emoji').setDescription('Emoji del canal nuevo (formato 「emoji」nombre-a-nombre)'))
@@ -123,7 +113,7 @@ export default {
     .addSubcommand(sub =>
       sub
         .setName('editar')
-        .setDescription('Editar los campos de una asociación (Solo Staff)')
+        .setDescription('Edita los campos de una asociación')
         .addStringOption(o =>
           o
             .setName('nombre')
@@ -140,7 +130,7 @@ export default {
     .addSubcommand(sub =>
       sub
         .setName('eliminar')
-        .setDescription('Eliminar una asociación (Solo Admin)')
+        .setDescription('Elimina una asociación de la lista')
         .addStringOption(o =>
           o
             .setName('nombre')
@@ -151,27 +141,32 @@ export default {
     ),
 
   async autocomplete(interaction) {
-    const search = interaction.options.getFocused().toLowerCase()
+    const focused = interaction.options.getFocused(true)
+    const search = String(focused.value).toLowerCase()
     const asociaciones = await Asociacion.find().sort({ servidor: 1 })
-    await interaction.respond(
-      asociaciones
-        .filter(a => a.servidor.toLowerCase().includes(search))
-        .slice(0, 25)
-        .map(a => ({ name: a.servidor, value: a.id.toString() }))
-    )
+
+    const seen = new Set<string>()
+    const options: { name: string, value: string }[] = []
+    for (const a of asociaciones) {
+      if (!a.servidor.toLowerCase().includes(search)) continue
+      const name = capitalizeName(a.servidor).slice(0, 100)
+      if (seen.has(name.toLowerCase())) continue
+      seen.add(name.toLowerCase())
+      options.push({ name, value: a.id.toString() })
+      if (options.length >= 25) break
+    }
+
+    await interaction.respond(options)
   },
 
   async execute(interaction: ChatInputCommandInteraction) {
     if (!interaction.guild) {
-      return interaction.reply({ content: 'Este comando solo puede usarse en un servidor.', ephemeral: true })
+      return interaction.reply({ content: 'Este comando solo puede usarse en un servidor.' })
     }
 
     const sub = interaction.options.getSubcommand()
 
-    // `mostrar` sigue siendo privado; el resto responde en canales con embeds normales
-    await (sub === 'mostrar'
-      ? interaction.deferReply({ flags: MessageFlags.Ephemeral })
-      : interaction.deferReply())
+    await interaction.deferReply()
 
     const reply = async (content: string) => {
       await interaction.editReply({ content })
@@ -179,20 +174,17 @@ export default {
 
     /* ------------------- mostrar ------------------- */
     if (sub === 'mostrar') {
-      const servidorId = interaction.options.getString('servidor')
+      const asociacionParam = interaction.options.getString('asociacion')
       const staffUser = interaction.options.getUser('staff')
 
-      if (servidorId) {
-        const asociacion = await Asociacion.findById(servidorId) ?? await Asociacion.findOne(servidorFilter(servidorId))
+      if (asociacionParam) {
+        const asociacion = await findAsociacion(asociacionParam)
         if (!asociacion) {
-          return void reply(`No se encontró ninguna asociación con \`${servidorId}\`.`)
+          return void reply(`No se encontró ninguna asociación con \`${asociacionParam}\`.`)
         }
 
         return void interaction.editReply(
-          buildAssociationDetailPayload(asociacion, {
-            canEdit: await hasPermission(interaction, 'staff'),
-            canDelete: interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ?? false
-          }) as never
+          buildAssociationDetailPayload(asociacion, { canEdit: true, canDelete: true }) as never
         )
       }
 
@@ -204,23 +196,19 @@ export default {
       const menu = new UserSelectMenuBuilder()
         .setCustomId(STAFF_MENU_ID)
         .setPlaceholder('Selecciona el staff o miembro a consultar')
-      return void interaction.editReply({
-        embeds: [greenEmbed().setTitle(`${EMOJI.asociacion} ¿A quién consultamos?`)
-          .setDescription('Elige a un miembro del menú de abajo y verás sus asociaciones; si gestiona varias, podrás elegir una para ver toda la info con botones de editar/eliminar.')]
-        , components: [new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(menu)]
-      } as never)
-    }
-
-    const authorized = await hasPermission(interaction, 'staff')
-    if (!authorized) {
-      return void reply('**Acceso Denegado**: Solo el staff autorizado puede gestionar las asociaciones.')
+      return void interaction.editReply(buildMessageCard(
+        `# ${EMOJI.asociacion} ¿A quién consultamos?\n\n` +
+        'Elige a un miembro del menú de abajo y verás sus asociaciones; si gestiona varias, podrás elegir una para ver toda la info con botones de editar/eliminar.',
+        { actionRow: new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(menu) }
+      ) as never)
     }
 
     /* ------------------- crear ------------------- */
     if (sub === 'crear') {
       const canalOpt = interaction.options.getChannel('canal')
       const emoji = interaction.options.getString('emoji')?.trim()
-      const nombreOpt = interaction.options.getString('nombre')?.trim()
+      const nombreRaw = interaction.options.getString('nombre')?.trim()
+      const nombreOpt = nombreRaw ? capitalizeName(nombreRaw) : null
       const representante = interaction.options.getUser('representante', true)
       const dias = interaction.options.getInteger('tiempo-renovacion', true)
       const staffEncargadoId = interaction.options.getUser('staff-encargado')?.id ?? interaction.user.id
@@ -272,7 +260,7 @@ export default {
         interaction.client,
         greenEmbed().setTitle('📋 LOG: Asociación Creada').setDescription(
           `**Ejecutado por:** ${interaction.user}\n` +
-          `${EMOJI.servidor} **Servidor:** ${servidorDisplay}\n` +
+          `${EMOJI.servidor} **Asociación:** ${capitalizeName(asociacion.servidor)}\n` +
           `${EMOJI.canal} **Canal:** <#${asociacion.canalId}>\n` +
           `${EMOJI.representante} **Representante:** ${representante}\n` +
           `${EMOJI.staff} **Staff encargado:** <@${staffEncargadoId}>\n` +
@@ -282,30 +270,21 @@ export default {
 
       schedulePanelsSync(interaction.client)
 
-      const next = unix(asociacion.nextRenovationDate)
-      const embed = greenEmbed()
-        .setTitle(`${EMOJI.asociacion} Asociación creada — ${asociacion.servidor}`)
-        .setDescription(
-          [
-            `${EMOJI.canal} **Canal:** <#${asociacion.canalId}>`,
-            `${EMOJI.representante} **Representante:** <@${asociacion.representanteId}>`,
-            `${EMOJI.staff} **Staff encargado:** <@${asociacion.staffEncargadoId}>`,
-            `${EMOJI.renovacion} **Frecuencia:** cada ${asociacion.renovacionDias} día(s)`,
-            `${EMOJI.proxima} **Próxima renovación:** <t:${next}:d> (<t:${next}:R>)`
-          ].join('\n')
-        )
-        .setTimestamp()
-
-      return void interaction.editReply({ embeds: [embed] })
+      return void interaction.editReply(buildAssociationDetailPayload(asociacion, {
+        canEdit: true,
+        canDelete: true,
+        note: '✅ **Asociación creada correctamente.**'
+      }) as never)
     }
 
     /* ------------------- editar ------------------- */
     if (sub === 'editar') {
       const nombreOpt = interaction.options.getString('nombre', true)
-      const asociacion = await Asociacion.findById(nombreOpt) ?? await Asociacion.findOne(servidorFilter(nombreOpt))
+      const asociacion = await findAsociacion(nombreOpt)
       if (!asociacion) return void reply(`No se encontró ninguna asociación con \`${nombreOpt}\`.`)
 
-      const nuevoNombre = interaction.options.getString('nuevo-nombre')?.trim()
+      const nuevoNombreRaw = interaction.options.getString('nuevo-nombre')?.trim()
+      const nuevoNombre = nuevoNombreRaw ? capitalizeName(nuevoNombreRaw) : null
       const nuevoRepresentante = interaction.options.getUser('nuevo-representante')
       const nuevoEncargado = interaction.options.getUser('nuevo-encargado')
       const nuevaDuracion = interaction.options.getInteger('nueva-duracion')
@@ -364,48 +343,25 @@ export default {
         interaction.client,
         greenEmbed().setTitle('📋 LOG: Asociación Editada').setDescription(
           `**Ejecutado por:** ${interaction.user}\n` +
-          `${EMOJI.servidor} **Asociación:** ${asociacion.servidor} (<#${asociacion.canalId}>)\n\n` +
+          `${EMOJI.servidor} **Asociación:** ${capitalizeName(asociacion.servidor)} (<#${asociacion.canalId}>)\n\n` +
           cambios.join('\n')
         ).setTimestamp()
       )
 
-      const next = unix(asociacion.nextRenovationDate)
-      const embed = greenEmbed()
-        .setTitle(`${EMOJI.asociacion} Asociación editada — ${asociacion.servidor}`)
-        .setDescription('Los paneles de asociaciones se actualizaron solos.')
-        .addFields(
-          { name: 'Cambios aplicados', value: cambios.join('\n') },
-          {
-            name: 'Estado actual',
-            value: [
-              `${EMOJI.representante} **Representante:** ${asociacion.representanteId ? `<@${asociacion.representanteId}>` : '*Sin asignar*'}`,
-              `${EMOJI.staff} **Staff encargado:** ${asociacion.staffEncargadoId ? `<@${asociacion.staffEncargadoId}>` : '*Sin asignar*'}`,
-              `${EMOJI.renovacion} **Frecuencia:** cada ${asociacion.renovacionDias} día(s)`,
-              `${EMOJI.proxima} **Próxima renovación:** <t:${next}:d> (<t:${next}:R>)`
-            ].join('\n')
-          }
-        )
-        .setTimestamp()
-
-      return void interaction.editReply({ embeds: [embed] })
+      return void interaction.editReply(buildAssociationDetailPayload(asociacion, {
+        canEdit: true,
+        canDelete: true,
+        note: `✏️ **Cambios aplicados**\n${cambios.join('\n')}`
+      }) as never)
     }
 
     /* ------------------- eliminar ------------------- */
     if (sub === 'eliminar') {
-      if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
-        return void reply('**Solo los administradores pueden eliminar asociaciones.**')
-      }
-
       const nombreOpt = interaction.options.getString('nombre', true)
-      const asociacion = await Asociacion.findById(nombreOpt) ?? await Asociacion.findOne(servidorFilter(nombreOpt))
+      const asociacion = await findAsociacion(nombreOpt)
       if (!asociacion) return void reply(`No se encontró ninguna asociación con \`${nombreOpt}\`.`)
 
-      const confirm = buildRemoveConfirmPayload(asociacion)
-      return void interaction.editReply({
-        embeds: confirm.embeds as never,
-        components: confirm.components as never
-      })
+      return void interaction.editReply(buildRemoveConfirmPayload(asociacion) as never)
     }
-
   }
 } satisfies SlashCommand

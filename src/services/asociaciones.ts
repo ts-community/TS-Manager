@@ -12,6 +12,7 @@ import {
   MessageFlags,
   type Client,
   type Message,
+  type MessageActionRowComponentBuilder,
   ChannelType,
   type ThreadChannel,
 } from 'discord.js'
@@ -37,6 +38,7 @@ export const ASOCIACIONES_PING_ROLE_ID = '1219196487011930194'
 export const ASOCIACIONES_COLOR = 0x2ecc71
 
 const DAY_MS = 24 * 60 * 60 * 1000
+const MAX_CONTAINER_CHARS = 3800
 
 export const EMOJI = {
   asociacion: '🤝',
@@ -73,10 +75,29 @@ export function cleanChannelName(rawName: string): string {
 
 // Nombre display a partir del canal: "「❤」el-sotano-oficial" -> "El Sotano Oficial"
 export function titleFromChannelName(rawName: string): string {
-  return cleanChannelName(rawName)
+  return capitalizeName(cleanChannelName(rawName))
+}
+
+// Monosílabo aproximado: una sola agrupación de vocales (o ninguna, tipo "TS")
+function isMonosyllable(word: string): boolean {
+  const groups = word.toLowerCase().match(/[aeiouáéíóúü]+/g)
+  return !groups || groups.length <= 1
+}
+
+// Nombre para mostrar: primera letra de cada palabra en mayúscula, salvo monosílabos.
+// Respeta mayúsculas ya existentes (siglas, nombres propios). "la casa de papel" -> "La Casa de Papel"
+export function capitalizeName(name: string): string {
+  const trimmed = name.trim()
+  if (!trimmed) return trimmed
+  return trimmed
     .split(/\s+/)
-    .filter(Boolean)
-    .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1))
+    .map((word, index) => {
+      if (!word) return word
+      // Si el usuario ya puso mayúsculas (siglas, nombres propios...), no las tocamos
+      if (word !== word.toLowerCase()) return word
+      if (index > 0 && isMonosyllable(word)) return word
+      return word.charAt(0).toUpperCase() + word.slice(1)
+    })
     .join(' ')
 }
 
@@ -174,7 +195,7 @@ export async function checkRepresentantesAusentes(client: Client): Promise<void>
     .setTitle('❌ Representantes que salieron del servidor')
     .setDescription(
       ausentes
-        .map(a => `${EMOJI.canal} **${a.servidor}** (<#${a.canalId}>)\n${EMOJI.representante} Representante: <@${a.representanteId}> ya no está en el servidor`)
+        .map(a => `${EMOJI.canal} **${capitalizeName(a.servidor)}** (<#${a.canalId}>)\n${EMOJI.representante} Representante: <@${a.representanteId}> ya no está en el servidor`)
         .join('\n\n')
     )
     .addFields({ name: 'Acción sugerida', value: 'Asigna un nuevo representante con `/asociaciones editar`.' })
@@ -204,7 +225,7 @@ export async function checkDueAsociaciones(client: Client): Promise<void> {
     const embed = greenEmbed()
       .setTitle('🔄 Toca Renovar Asociación')
       .setDescription(
-        `Ha llegado la fecha de renovación de la asociación con **${asociacion.servidor}**.\n\n` +
+        `Ha llegado la fecha de renovación de la asociación con **${capitalizeName(asociacion.servidor)}**.\n\n` +
         `${EMOJI.representante} **Representante:** ${asociacion.representanteId ? `<@${asociacion.representanteId}>` : 'Sin asignar'}\n` +
         `${EMOJI.canal} **Canal:** <#${asociacion.canalId}>\n` +
         `${EMOJI.renovacion} **Frecuencia:** Cada ${asociacion.renovacionDias} días\n` +
@@ -249,7 +270,7 @@ export function buildEditorPayload(
   const container = new ContainerBuilder()
     .setAccentColor(0x2ecc71)
     .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`# ✏️ Editar: ${a.servidor}\n-# <#${a.canalId}> · próxima renovación <t:${next}:d>`)
+      new TextDisplayBuilder().setContent(`# ✏️ Editar: ${capitalizeName(a.servidor)}\n-# <#${a.canalId}> · próxima renovación <t:${next}:d>`)
     )
     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
     .addTextDisplayComponents(
@@ -262,33 +283,46 @@ export function buildEditorPayload(
   return { flags: MessageFlags.IsComponentsV2, components: [container] }
 }
 
-// Mensaje público de confirmación previa a eliminar (fusionado de asociacionesPanel.ts)
-export function buildRemoveConfirmPayload(a: AsociacionLike): { embeds: EmbedBuilder[], components: ActionRowBuilder<ButtonBuilder>[] } {
-  const dotId = asocId(a)
-  const embed = new EmbedBuilder()
-    .setColor(0xE74C3C)
-    .setTitle(`🗑️ Eliminar asociación — ${a.servidor}`)
-    .setDescription(
-      `${EMOJI.canal} Canal: <#${a.canalId}>\n\n` +
-      `Confirmar **borra** la asociación de la lista y los paneles.\n` +
-      `El canal de Discord **no** se borra.\n\n` +
-      `Si no es eso, pulsa **Cancelar**.`
-    )
-  return {
-    embeds: [embed],
-    components: [
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`asoc-btn-eliminar-confirmar:${dotId}`).setLabel('🗑️ Confirmar').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId(`asoc-btn-eliminar-cancelar:${dotId}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
-      )
-    ]
-  }
+// Tarjeta V2 simple (texto + acción opcional)
+export function buildMessageCard(
+  content: string,
+  { color = ASOCIACIONES_COLOR, actionRow }: {
+    color?: number
+    actionRow?: ActionRowBuilder<MessageActionRowComponentBuilder>
+  } = {}
+): { flags: number, components: Container[] } {
+  const container = new ContainerBuilder()
+    .setAccentColor(color)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(content))
+
+  if (actionRow) container.addActionRowComponents(actionRow)
+
+  return { flags: MessageFlags.IsComponentsV2, components: [container] }
 }
 
-// Tarjeta V2 fusionada (de asociacionesPanel.ts)
+// Confirmación previa a eliminar (mismo formato de tarjeta que el resto)
+export function buildRemoveConfirmPayload(a: AsociacionLike): { flags: number, components: Container[] } {
+  const dotId = asocId(a)
+
+  const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`asoc-btn-eliminar-confirmar:${dotId}`).setLabel('🗑️ Confirmar').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`asoc-btn-eliminar-cancelar:${dotId}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
+  )
+
+  return buildMessageCard(
+    `# 🗑️ Eliminar asociación — ${capitalizeName(a.servidor)}\n\n` +
+    `${EMOJI.canal} **Canal:** <#${a.canalId}>\n\n` +
+    `Confirmar **borra** la asociación de la lista y de los paneles.\n` +
+    `El canal de Discord **no** se borra.\n\n` +
+    `Si no es eso, pulsa **Cancelar**.`,
+    { color: 0xE74C3C, actionRow }
+  )
+}
+
+// Tarjeta V2 de una asociación (mismo estilo que la lista del hilo en vivo)
 export function buildAssociationDetailPayload(
   a: AsociacionLike,
-  { canEdit = true, canDelete = false } = {}
+  { canEdit = true, canDelete = false, note }: { canEdit?: boolean, canDelete?: boolean, note?: string } = {}
 ): { flags: number, components: Container[] } {
   const next = unix(a.nextRenovationDate)
   const last = unix(a.lastRenovationDate)
@@ -296,19 +330,28 @@ export function buildAssociationDetailPayload(
   const dotId = asocId(a)
 
   const container = new ContainerBuilder()
-    .setAccentColor(0x2ecc71)
+    .setAccentColor(ASOCIACIONES_COLOR)
     .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`# 🤝 ${a.servidor}\n-# <#${a.canalId}> · creada <t:${created}:d>`)
+      new TextDisplayBuilder().setContent(`# ${EMOJI.asociacion} ${capitalizeName(a.servidor)}\n-# creada <t:${created}:d>`)
     )
     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+
+  if (note) {
+    container
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(note))
+      .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+  }
+
+  container
     .addTextDisplayComponents(
       new TextDisplayBuilder().setContent(
         [
+          `${EMOJI.canal} **Canal:** <#${a.canalId}>`,
           `${EMOJI.representante} **Representante:** ${a.representanteId ? `<@${a.representanteId}>` : '*Sin asignar*'}`,
           `${EMOJI.staff} **Staff encargado:** ${a.staffEncargadoId ? `<@${a.staffEncargadoId}>` : '*Sin asignar*'}`,
           `${EMOJI.renovacion} **Frecuencia:** cada ${a.renovacionDias} día(s)`,
-          `${EMOJI.proxima} **Próxima renovación:** <t:${next}:d> (<t:${next}:R>)`,
-          `${EMOJI.ultima} **Última renovación:** <t:${last}:d>`
+          `${EMOJI.ultima} **Última renovación:** <t:${last}:d> (<t:${last}:R>)`,
+          `${EMOJI.proxima} **Próxima renovación:** <t:${next}:d> (<t:${next}:R>)`
         ].join('\n')
       )
     )
@@ -332,6 +375,58 @@ export function buildAssociationDetailPayload(
   return { flags: MessageFlags.IsComponentsV2, components: [container] }
 }
 
+// Lista V2 de asociaciones (mismo estilo que el hilo en vivo, sin estado de renovación)
+export function buildAssociationsListPayload(
+  asociaciones: AsociacionLike[],
+  { title, subtitle, menu }: { title: string, subtitle?: string, menu?: StringSelectMenuBuilder } = { title: 'Asociaciones' }
+): { flags: number, components: Container[] } {
+  const shown = asociaciones.slice(0, 25)
+  const containers: Container[] = []
+  let builder: ContainerBuilder = new ContainerBuilder().setAccentColor(ASOCIACIONES_COLOR)
+  let length = 0
+  let blocks = 0
+
+  const openContainer = () => {
+    builder = new ContainerBuilder().setAccentColor(ASOCIACIONES_COLOR)
+    containers.push(builder)
+    length = 0
+    blocks = 0
+  }
+
+  builder.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(`# ${EMOJI.asociacion} ${title}${subtitle ? `\n-# ${subtitle}` : ''}`)
+  )
+  builder.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+  length += title.length + (subtitle?.length ?? 0) + 20
+
+  for (const a of shown) {
+    const next = unix(a.nextRenovationDate)
+    const last = unix(a.lastRenovationDate)
+    const content = [
+      `**${EMOJI.servidor} ${capitalizeName(a.servidor)}**`,
+      `${EMOJI.canal} **Canal:** <#${a.canalId}>`,
+      `${EMOJI.representante} **Representante:** ${a.representanteId ? `<@${a.representanteId}>` : '*Sin asignar*'}`,
+      `${EMOJI.renovacion} **Frecuencia:** cada ${a.renovacionDias} día(s)`,
+      `${EMOJI.ultima} **Última renovación:** <t:${last}:d> (<t:${last}:R>)`,
+      `${EMOJI.proxima} **Próxima renovación:** <t:${next}:d> (<t:${next}:R>)`
+    ].join('\n')
+
+    if (length + content.length + 40 > MAX_CONTAINER_CHARS) openContainer()
+    if (blocks > 0) builder.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    builder.addTextDisplayComponents(new TextDisplayBuilder().setContent(content))
+    length += content.length + 40
+    blocks++
+  }
+
+  if (asociaciones.length > shown.length) {
+    builder.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Mostrando ${shown.length} de ${asociaciones.length} asociaciones.`))
+  }
+
+  if (menu) builder.addActionRowComponents(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu))
+
+  return { flags: MessageFlags.IsComponentsV2, components: containers }
+}
+
 // ===== Panel types & functions (fusionados de asociacionesPanel.ts) =====
 
 // Canal/hilo donde vive el panel "en vivo" del estado de asociaciones
@@ -349,7 +444,6 @@ export const ALIANZAS_ROLE_IDS = [
 ]
 
 // En Components V2 el límite de texto por mensaje es 4000 chars
-const MAX_CONTAINER_CHARS = 3800
 
 export interface StaffGroup {
   staffId: string | null

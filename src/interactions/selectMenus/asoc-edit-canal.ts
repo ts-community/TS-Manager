@@ -8,16 +8,16 @@ import { hasPermission } from '../../services/permissions'
 export default {
   async execute(interaction: ChannelSelectMenuInteraction): Promise<void> {
     if (!await hasPermission(interaction, 'staff')) {
-      return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.', ephemeral: true })
+      return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.' })
     }
 
     const asociacion = await Asociacion.findById(interaction.customId.split(':')[1])
-    if (!asociacion) return void interaction.reply({ content: 'Esta asociación ya no existe.', ephemeral: true })
+    if (!asociacion) return void interaction.reply({ content: 'Esta asociación ya no existe.' })
 
     const canalId = interaction.values[0]
     const canal = await interaction.guild?.channels.fetch(canalId).catch(() => null)
     if (!canal || canal.type !== ChannelType.GuildText) {
-      return void interaction.reply({ content: 'El canal seleccionado no es un canal de texto.', ephemeral: true })
+      return void interaction.reply({ content: 'El canal seleccionado no es un canal de texto.' })
     }
     const last = await getLastMessageDate(canal)
     asociacion.canalId = canalId
