@@ -1,9 +1,7 @@
 import {
-  ActionRowBuilder,
   ChannelType,
   SlashCommandBuilder,
   StringSelectMenuBuilder,
-  UserSelectMenuBuilder,
   type ChatInputCommandInteraction,
   type Collection,
   type Message
@@ -13,7 +11,6 @@ import Asociacion from '../../../models/Asociacion'
 import {
   buildAssociationDetailPayload,
   buildAssociationsListPayload,
-  buildMessageCard,
   buildRemoveConfirmPayload,
   capitalizeName,
   schedulePanelsSync,
@@ -30,7 +27,6 @@ import {
   unix
 } from '../../../services/asociaciones'
 
-const STAFF_MENU_ID = 'asoc-select-staff'
 const ASOCIACION_MENU_ID = 'asoc-select-asociacion'
 
 async function getLastMessageDate(channel: unknown): Promise<Date> {
@@ -61,7 +57,7 @@ async function buildAsociacionesStaffPayload(
   }
 
   if (asociaciones.length === 1) {
-    return buildAssociationDetailPayload(asociaciones[0], { canEdit: true, canDelete: true })
+    return buildAssociationDetailPayload(asociaciones[0])
   }
 
   const menu = new StringSelectMenuBuilder()
@@ -73,7 +69,6 @@ async function buildAsociacionesStaffPayload(
 
   return buildAssociationsListPayload(asociaciones, {
     title: `Asociaciones de ${staffName}`,
-    subtitle: `${asociaciones.length} asociaciones`,
     menu
   })
 }
@@ -183,24 +178,15 @@ export default {
           return void reply(`No se encontró ninguna asociación con \`${asociacionParam}\`.`)
         }
 
-        return void interaction.editReply(
-          buildAssociationDetailPayload(asociacion, { canEdit: true, canDelete: true }) as never
-        )
+        return void interaction.editReply(buildAssociationDetailPayload(asociacion) as never)
       }
 
       if (staffUser) {
         return void interaction.editReply(await buildAsociacionesStaffPayload(interaction, staffUser.id) as never)
       }
 
-      // Sin parámetros: menú para elegir el staff/miembro
-      const menu = new UserSelectMenuBuilder()
-        .setCustomId(STAFF_MENU_ID)
-        .setPlaceholder('Selecciona el staff o miembro a consultar')
-      return void interaction.editReply(buildMessageCard(
-        `# ${EMOJI.asociacion} ¿A quién consultamos?\n\n` +
-        'Elige a un miembro del menú de abajo y verás sus asociaciones; si gestiona varias, podrás elegir una para ver toda la info con botones de editar/eliminar.',
-        { actionRow: new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(menu) }
-      ) as never)
+      // Sin parámetros: indicar que debe elegir una asociación o un staff
+      return void reply('Debes indicar una asociación o un staff para consultar. Usa las opciones `asociacion` o `staff`.')
     }
 
     /* ------------------- crear ------------------- */
@@ -271,9 +257,8 @@ export default {
       schedulePanelsSync(interaction.client)
 
       return void interaction.editReply(buildAssociationDetailPayload(asociacion, {
-        canEdit: true,
-        canDelete: true,
-        note: '✅ **Asociación creada correctamente.**'
+        intro: '✅ **Asociación creada correctamente.**',
+        showLastRenewal: false
       }) as never)
     }
 
@@ -329,7 +314,7 @@ export default {
         asociacion.nextRenovationDate = addDays(new Date(asociacion.lastRenovationDate as Date), nuevaDuracion)
         asociacion.renovacionAvisada = false
         const next = unix(asociacion.nextRenovationDate)
-        cambios.push(`${EMOJI.renovacion} **Frecuencia:** cada ${anterior} → **cada ${nuevaDuracion}** día(s) · ${EMOJI.proxima} Próxima: <t:${next}:d>`)
+        cambios.push(`${EMOJI.renovacion} **Frecuencia:** cada ${anterior} → **cada ${nuevaDuracion}** día(s). ${EMOJI.proxima} Próxima: <t:${next}:R>`)
       }
 
       if (!cambios.length) {
@@ -349,9 +334,7 @@ export default {
       )
 
       return void interaction.editReply(buildAssociationDetailPayload(asociacion, {
-        canEdit: true,
-        canDelete: true,
-        note: `✏️ **Cambios aplicados**\n${cambios.join('\n')}`
+        intro: `✏️ **Cambios aplicados**\n${cambios.join('\n')}`
       }) as never)
     }
 

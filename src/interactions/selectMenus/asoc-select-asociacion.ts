@@ -16,6 +16,6 @@ export default {
       return void interaction.reply({ content: 'Esta asociación ya no existe.' })
     }
 
-    await interaction.update(buildAssociationDetailPayload(asociacion, { canEdit: true, canDelete: true }))
+    await interaction.update(buildAssociationDetailPayload(asociacion))
   }
 }

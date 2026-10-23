@@ -1,6 +1,6 @@
 import type { ButtonInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
-import { buildMessageCard, capitalizeName, schedulePanelsSync } from '../../services/asociaciones'
+import { buildNoticePayload, capitalizeName, schedulePanelsSync } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
 // CustomId: asoc-btn-eliminar-confirmar:{asociacionId} — elimina (solo staff)
@@ -12,7 +12,7 @@ export default {
 
     const asociacion = await Asociacion.findById(interaction.customId.split(':')[1])
     if (!asociacion) {
-      return void interaction.update(buildMessageCard('La asociación ya no existe.', { color: 0xE74C3C }) as never)
+      return void interaction.update(buildNoticePayload('La asociación ya no existe.') as never)
     }
 
     const deleted = await Asociacion.findByIdAndDelete(asociacion.id)
@@ -22,6 +22,6 @@ export default {
       ? `🗑️ La asociación **${capitalizeName(deleted.servidor)}** ha sido eliminada.`
       : 'La asociación ya no existía.'
 
-    await interaction.update(buildMessageCard(content, { color: 0xE74C3C }) as never)
+    await interaction.update(buildNoticePayload(content) as never)
   }
 }

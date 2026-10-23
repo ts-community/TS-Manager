@@ -36,7 +36,7 @@ export default {
     }
 
     if (asociaciones.length === 1) {
-      return void interaction.update(buildAssociationDetailPayload(asociaciones[0], { canEdit: true, canDelete: true }))
+      return void interaction.update(buildAssociationDetailPayload(asociaciones[0]))
     }
 
     const menu = new StringSelectMenuBuilder()
@@ -48,7 +48,6 @@ export default {
 
     await interaction.update(buildAssociationsListPayload(asociaciones, {
       title: `Asociaciones de ${perfil?.displayName ?? 'staff'}`,
-      subtitle: `${asociaciones.length} asociaciones`,
       menu
     }))
   }
