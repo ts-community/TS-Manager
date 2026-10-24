@@ -87,9 +87,44 @@ const TIME_UNITS = new Set([
 ]);
 
 const NUMBER = /^\d+$/;
+const LETTERS = /^[a-z]+$/;
 
 function isNonIntent(word: string): boolean {
   return FILLERS.has(word) || TIME_UNITS.has(word) || NUMBER.test(word);
+}
+
+// True si `a` y `b` difieren en una sola errata: inserción, borrado, cambio o dos
+// letras intercambiadas ("laguien" ~ "alguien", "alguiem" ~ "alguien").
+function withinOneEdit(a: string, b: string): boolean {
+  const diff = a.length - b.length;
+  if (diff > 1 || diff < -1) return false;
+  if (a.length === b.length) {
+    const positions: number[] = [];
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) {
+        positions.push(i);
+        if (positions.length > 2) return false;
+      }
+    }
+    if (positions.length < 2) return true;
+    const [i, j] = positions;
+    return j === i + 1 && a[i] === b[j] && a[j] === b[i];
+  }
+  const [shortWord, longWord] = a.length < b.length ? [a, b] : [b, a];
+  let i = 0;
+  let j = 0;
+  let skipped = false;
+  while (i < shortWord.length && j < longWord.length) {
+    if (shortWord[i] === longWord[j]) {
+      i++;
+      j++;
+    } else {
+      if (skipped) return false;
+      skipped = true;
+      j++;
+    }
+  }
+  return true;
 }
 
 
@@ -158,6 +193,8 @@ export class TextDetector {
   private readonly smooth: number;
   private readonly words: Block;
   private readonly chars: Block;
+  // Palabras conocidas (unigramas) con su idf, para corregir erratas de una letra.
+  private readonly lexicon: Map<string, number>;
 
   constructor(raw: RawModel) {
     this.module = raw.module;
@@ -170,14 +207,37 @@ export class TextDetector {
     this.smooth = raw.smooth ?? 0;
     this.words = toBlock(raw.words);
     this.chars = toBlock(raw.chars);
+    this.lexicon = new Map();
+    for (const [term, [idf]] of this.words.terms) {
+      if (LETTERS.test(term)) this.lexicon.set(term, idf);
+    }
   }
 
   static fromFile(path: string | URL): TextDetector {
     return new TextDetector(JSON.parse(readFileSync(path, "utf8")) as RawModel);
   }
 
+  // Corrige erratas de una sola letra solo en palabras desconocidas. Una palabra que ya
+  // existe en el vocabulario no se toca, así que no altera formas válidas ("juego"/"juega").
+  private fixTypos(text: string): string {
+    return text.replace(WORD, (token) => {
+      if (token.length < 4 || !LETTERS.test(token) || this.lexicon.has(token)) return token;
+      let best = token;
+      let bestIdf = Infinity;
+      for (const [candidate, idf] of this.lexicon) {
+        if (Math.abs(candidate.length - token.length) > 1) continue;
+        if (!withinOneEdit(token, candidate)) continue;
+        if (idf < bestIdf || (idf === bestIdf && candidate < best)) {
+          best = candidate;
+          bestIdf = idf;
+        }
+      }
+      return best;
+    });
+  }
+
   score(text: string): number {
-    const t = preprocess(text);
+    const t = this.fixTypos(preprocess(text));
     // Si el mensaje es solo muletillas, palabras funcionales, números o unidades de tiempo
     // ("ok", "en 30 min", "aqui"...), no hay intención: score 0.
     const words = t.match(WORD) ?? [];

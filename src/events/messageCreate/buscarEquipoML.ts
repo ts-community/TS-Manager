@@ -6,21 +6,27 @@ import {
 } from '../../services/buscarEquipo'
 import { mlTeamSearch } from '../../ml/index'
 
-const PING_COOLDOWN_MS = 10 * 60 * 1000
+const SESSION_IDLE_MS = 5 * 60 * 1000
+const SESSION_MAX_MS = 20 * 60 * 1000
 const MAX_TEXT_LENGTH = 500
 const MAX_REPLY_CONTENT_LENGTH = 1500
 
-/** Tiempo durante el que no se vuelve a auto-ping a un usuario tras usar el rol (él o el bot). */
-const lastPingAt = new Map<string, number>()
+/** Sesión de búsqueda: se abre con el primer ping y se cierra tras un rato sin actividad. */
+let sessionStartedAt = 0
+let lastActivityAt = 0
 
-function markPing(userId: string): void {
-  lastPingAt.set(userId, Date.now())
-  setTimeout(() => lastPingAt.delete(userId), PING_COOLDOWN_MS)
+function isSessionOpen(now: number): boolean {
+  if (sessionStartedAt === 0) return false
+  if (now - lastActivityAt >= SESSION_IDLE_MS || now - sessionStartedAt >= SESSION_MAX_MS) {
+    sessionStartedAt = 0
+    return false
+  }
+  return true
 }
 
-function isOnCooldown(userId: string): boolean {
-  const last = lastPingAt.get(userId)
-  return last !== undefined && Date.now() - last < PING_COOLDOWN_MS
+function openSession(now: number): void {
+  sessionStartedAt = now
+  lastActivityAt = now
 }
 
 function truncate(text: string, maxLength: number): string {
@@ -32,12 +38,18 @@ export default {
     if (message.channelId !== BUSCAR_EQUIPO_CHANNEL_ID) return
     if (message.author.bot || !message.guild) return
 
+    const now = Date.now()
+    const sessionOpen = isSessionOpen(now)
+
+    // Cualquier mensaje humano mantiene viva la búsqueda en curso.
+    if (sessionOpen) lastActivityAt = now
+
     if (message.mentions.roles.has(BUSCAR_EQUIPO_ROLE_ID)) {
-      markPing(message.author.id)
+      if (!sessionOpen) openSession(now)
       return
     }
 
-    if (isOnCooldown(message.author.id)) return
+    if (sessionOpen) return
 
     const content = message.content.trim()
     if (!content || content.length > MAX_TEXT_LENGTH) return
@@ -45,7 +57,7 @@ export default {
     const { decision } = mlTeamSearch.predict(content)
     if (decision !== 'looking') return
 
-    markPing(message.author.id)
+    openSession(now)
 
     await message.reply({
       content: `**[${message.member?.displayName ?? message.author.username}]** ${truncate(content, MAX_REPLY_CONTENT_LENGTH)} <@&${BUSCAR_EQUIPO_ROLE_ID}>`,
