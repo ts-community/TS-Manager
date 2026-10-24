@@ -6,6 +6,26 @@ import { mlParticipation } from '../../ml/index'
 export const MINIJUEGOS_CHANNEL_ID = '1552390158081331419'
 
 const MAX_TEXT_LENGTH = 300
+/** Mensajes más cortos que esto, solos, no expresan intención: con el citado pueden decidir. */
+const SHORT_MESSAGE_LENGTH = 30
+const MAX_CONTEXT_LENGTH = 250
+
+/**
+ * Si el mensaje es corto y responde a otro usuario, se antepone el contenido citado:
+ * así un "yo tmb" tras un "yo participo" sí se detecta como participación.
+ */
+async function withReplyContext(message: Message, content: string): Promise<string> {
+  if (content.length > SHORT_MESSAGE_LENGTH) return content
+  if (!message.reference?.messageId) return content
+
+  const reference = await message.fetchReference().catch(() => null)
+  if (!reference || reference.author.bot) return content
+
+  const referenceText = reference.content.trim()
+  if (!referenceText || referenceText.length > MAX_CONTEXT_LENGTH) return content
+
+  return `${referenceText} ${content}`
+}
 
 /** Cache en memoria de participantes por hilo; se escribe y se lee a la vez en la DB. */
 const participantsByThread = new Map<string, Set<string>>()
@@ -41,7 +61,8 @@ export default {
     const content = message.content.trim()
     if (!content || content.length > MAX_TEXT_LENGTH) return
 
-    const { decision } = mlParticipation.predict(content)
+    const text = await withReplyContext(message, content)
+    const { decision } = mlParticipation.predict(text)
     if (decision !== 'joining') return
 
     await addParticipant(thread.id, message.author.id)

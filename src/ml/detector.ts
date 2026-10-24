@@ -50,6 +50,7 @@ export interface RawModel {
   threshold: number;
   intercept: number;
   smooth?: number; // suavizado L2: evita que una sola palabra genérica dispare el score
+  data_hash?: string; // huella de los CSV usados al entrenar (para detectar modelos viejos)
   metrics?: ModelMetrics;
   words: RawBlock;
   chars: RawBlock;
@@ -68,13 +69,28 @@ interface Block {
 const COMBINING = /[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]/g;
 const WORD = /[\p{L}\p{N}_]{2,}/gu;
 
-// Muletillas que por sí solas no expresan intención: si el mensaje es solo esto, no decide
-// positivo (evita falsos positivos con "ok", "vale", "yo", "si"...). Igual que en train.py.
+// Muletillas y palabras funcionales que por sí solas no expresan intención: si el mensaje
+// es solo esto, no decide positivo (evita falsos positivos con "ok", "vale", "en", "aqui"...).
+// Igual que en train.py.
 const FILLERS = new Set([
   "ok", "okey", "oki", "vale", "si", "sii", "no", "ya", "yo", "me", "vamos", "eh", "uh",
   "xd", "jaja", "jeje", "bueno", "genial", "perfecto", "dale", "eso", "que", "tambien",
   "tamb", "tb", "tmb", "y", "a", "gracias", "buenas", "hola", "hey", "epa", "wep",
+  "en", "aqui", "aca",
 ]);
+
+// Unidades de tiempo: "en 30 min", "5 minutos" o "1 hora" no expresan intención por sí solos.
+const TIME_UNITS = new Set([
+  "seg", "segs", "segundo", "segundos", "min", "mins", "minuto", "minutos",
+  "hora", "horas", "rato", "momento", "dia", "dias", "semana", "semanas",
+  "mes", "meses", "ano", "anos",
+]);
+
+const NUMBER = /^\d+$/;
+
+function isNonIntent(word: string): boolean {
+  return FILLERS.has(word) || TIME_UNITS.has(word) || NUMBER.test(word);
+}
 
 
 // Igual que TfidfVectorizer(lowercase=True, strip_accents="unicode")
@@ -136,6 +152,7 @@ export class TextDetector {
   readonly positive: string;
   readonly negative: string;
   readonly threshold: number;
+  readonly dataHash?: string;
   readonly metrics?: ModelMetrics;
   private readonly intercept: number;
   private readonly smooth: number;
@@ -147,6 +164,7 @@ export class TextDetector {
     this.positive = raw.positive;
     this.negative = raw.negative;
     this.threshold = raw.threshold;
+    this.dataHash = raw.data_hash;
     this.metrics = raw.metrics;
     this.intercept = raw.intercept;
     this.smooth = raw.smooth ?? 0;
@@ -160,9 +178,10 @@ export class TextDetector {
 
   score(text: string): number {
     const t = preprocess(text);
-    // Si el mensaje es solo muletillas ("ok", "vale", "yo", "si"...), no hay intención: score 0.
+    // Si el mensaje es solo muletillas, palabras funcionales, números o unidades de tiempo
+    // ("ok", "en 30 min", "aqui"...), no hay intención: score 0.
     const words = t.match(WORD) ?? [];
-    if (words.length > 0 && words.every((w) => FILLERS.has(w))) return 0;
+    if (words.length > 0 && words.every(isNonIntent)) return 0;
     const wordContrib = contribution(this.words, wordNgrams(t, this.words.range), this.smooth);
     const charContrib = contribution(this.chars, charWbNgrams(t, this.chars.range), this.smooth);
     const z = this.intercept + wordContrib + charContrib;
