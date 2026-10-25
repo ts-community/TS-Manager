@@ -448,10 +448,8 @@ function buildTimestampContent(formattedDate: string): string {
 > [GuilleVGX - Brawl Stars](https://discord.gg/77sQHhmZkm)
 > [GoDeik TEAM](https://discord.gg/CKZUMsqhxM)
 > [Templo de los ricochets (iKaoss community)](https://discord.gg/6VhNHVMgcr)
-> [Rol & Role coaching](https://discord.gg/b7eZh27aDH)
 > [Brawl Stars Fénix](https://discord.gg/T2QCXxXX8a)
 > [ELPIPEKAS - BRAWL STARS](https://discord.gg/pPpdwrMuBk)
-> [Pizza BS](https://discord.gg/jcmeX4bS9g)
 > [Cats World BS](https://discord.gg/n6qqa5CyN7)
 > [DGP Community](https://discord.gg/EVMJKXS8Tf)
 > [Comunidad de Boss](https://discord.gg/comunidad-de-boss-1208187837934207086)
@@ -477,27 +475,25 @@ function formatRanksText(globalRank: number | null, localRank: number | null, fl
 
 function buildPromoContent(members: string, clubs: number, clubsValues: string): string {
   return `
-## ✦₊୧ \`T\` \`S\`   \`C\` \`O\` \`M\` \`U\` \`N\` \`I\` \`T\` \`Y\` ୨₊✦
-### ✦₊꒷꒦︶︶︶୧ \`B\` \`R\`  \`A\`  \`W\` \`L\` ୨︶︶︶꒦꒷₊✦
+## ✦₊୧ \`T\` \`S\` \`C\` \`O\` \`M\` \`M\` \`U\` \`N\` \`I\` \`T\` \`Y\` ୨₊✦
+### ✦₊꒷꒦︶︶︶୧ \`B\` \`R\` \`A\` \`W\` \`L\` ୨︶︶︶꒦꒷₊✦
 
-‎
 **Somos una amplia cadena de clubes
-presente en el top Español
-y en el top Global.**
+presente en el top Español y en el top Global.**
 
-### ʚ —— ˗ ˏ QUE OFRECEMOS ˊˎ ˗ —— ɞ
-> **\`‎ ୧🔰୨\` \`${clubs}\` clubes de Brawl Stars**
-> **\`‎ ୧💬୨\` Comunidad con \`${members}\` miembros**
-> **\`‎ ୧🛠️୨\` Staff experimentado**
+### ʚ —— ˗ ˏ ˋ QUÉ OFRECEMOS ˎˊ ˗ —— ɞ
+> **\` ୧🔰୨ \` ${clubs} clubes de Brawl Stars**
+> **\` ୧💬୨ \` ${members} miembros en Discord**
+> **\` ୧🛠️୨ \` Staff activo en Discord**
 
-### ʚ —— ˗ ˏ QUE BUSCAMOS ˊˎ ˗ —— ɞ
+### ʚ —— ˗ ˏ ˋ QUÉ BUSCAMOS ˎˊ ˗ —— ɞ
 > **\` ୧✨୨ \` Miembros para nuestros clubes**
-> **\` ୧👤୨ \` Personas interesadas en la creación de clubes**
+> **\` ୧👤୨ \` Creadores de clubes**
 
-### ʚ —— ˗ ˏ NUESTROS CLUBES ˊˎ ˗ —— ɞ
+### ʚ —— ˗ ˏ ˋ NUESTROS CLUBES ˎˊ ˗ —— ɞ
 \`\`\`${clubsValues}\`\`\`
 
-## 📨 ¡INTERESADOS Al MD!
+## 📨 ¡INTERESADOS AL MD!
 `
 }
 
