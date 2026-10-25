@@ -7,8 +7,8 @@ import {
 import { prefix } from '../../config/env'
 import { mlTeamSearch } from '../../ml/index'
 
-const SESSION_IDLE_MS = 5 * 60 * 1000
-const SESSION_MAX_MS = 20 * 60 * 1000
+const SESSION_IDLE_MS = 10 * 60 * 1000
+const SESSION_MAX_MS = 30 * 60 * 1000
 const MAX_TEXT_LENGTH = 500
 const MAX_REPLY_CONTENT_LENGTH = 1500
 
