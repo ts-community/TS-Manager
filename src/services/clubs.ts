@@ -493,8 +493,7 @@ presente en el top Español y en el top Global.**
 ### ʚ —— ˗ ˏ ˋ NUESTROS CLUBES ˎˊ ˗ —— ɞ
 \`\`\`${clubsValues}\`\`\`
 
-## 📨 ¡INTERESADOS AL MD!
-`
+## 📨 ¡INTERESADOS AL MD!`
 }
 
 /**
