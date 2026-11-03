@@ -9,6 +9,7 @@ import {
   type ButtonInteraction,
   type ModalSubmitInteraction
 } from 'discord.js'
+import mongoose from 'mongoose'
 import logger from '../utils/logger'
 
 export type PostulacionDecision = 'accept' | 'decline'
@@ -127,14 +128,22 @@ export async function handlePostulacionSubmit(interaction: ModalSubmitInteractio
       return
     }
 
-    const postEmbed = new EmbedBuilder()
-      .setTitle('Revisión de la Postulación')
-      .addFields(
+    // Se conserva el resto del mensaje (puesto y respuestas de las postulaciones de la web)
+    const [first, ...rest] = interaction.message?.embeds ?? []
+    const keptFields = (first?.fields ?? []).filter(f => f.name !== 'Usuario' && f.name !== 'Estado' && !f.name.endsWith(' por'))
+    const postEmbed = (first ? EmbedBuilder.from(first) : new EmbedBuilder().setTitle('Revisión de la Postulación'))
+      .setFields(
         { name: 'Usuario', value: `<@${userID}>`, inline: true },
         { name: 'Estado', value: status, inline: true },
-        { name: `${status} por`, value: `<@${interaction.user.id}>`, inline: true }
+        { name: `${status} por`, value: `<@${interaction.user.id}>`, inline: true },
+        ...keptFields
       )
       .setColor(color)
+
+    const panelUrl = interaction.message?.components
+      .flatMap(row => ('components' in row ? (row.components as unknown[]) : []))
+      .map(component => (component && typeof component === 'object' && 'url' in component ? (component as { url: string | null }).url : null))
+      .find((url): url is string => !!url)
 
     const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
@@ -148,8 +157,17 @@ export async function handlePostulacionSubmit(interaction: ModalSubmitInteractio
         .setStyle(ButtonStyle.Danger)
         .setDisabled(true)
     )
+    if (panelUrl) disabledRow.addComponents(new ButtonBuilder().setLabel('Ver en el panel').setURL(panelUrl).setStyle(ButtonStyle.Link))
 
-    await interaction.message?.edit({ embeds: [postEmbed], components: [disabledRow], allowedMentions: { users: [userID] } }).catch(() => null)
+    await interaction.message?.edit({ embeds: [postEmbed, ...rest], components: [disabledRow], allowedMentions: { users: [userID] } }).catch(() => null)
+
+    // Sincroniza el estado con el panel /admin de la web
+    if (interaction.message) {
+      await mongoose.connection.collection('applications').updateOne(
+        { discordMessageId: interaction.message.id },
+        { $set: { status: decision === 'accept' ? 'accepted' : 'rejected', reviewedBy: authorName, updatedAt: new Date() } }
+      ).catch(error => logger.error('No se pudo sincronizar la postulación', { message: String(error) }))
+    }
   } catch (error) {
     logger.error('Postulación submit failed', {
       message: error instanceof Error ? error.message : 'Unknown error'
