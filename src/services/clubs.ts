@@ -477,7 +477,7 @@ function buildPromoContent(members: string, clubs: number, clubsValues: string):
   return `
 ## ✦₊୧ \`T\` \`S\` \`C\` \`O\` \`M\` \`M\` \`U\` \`N\` \`I\` \`T\` \`Y\` ୨₊✦
 ### ✦₊꒷꒦︶︶︶୧ \`B\` \`R\` \`A\` \`W\` \`L\` ୨︶︶︶꒦꒷₊✦
-
+ㅤ
 **Somos una amplia cadena de clubes
 presente en el top Español y en el top Global.**
 
