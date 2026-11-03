@@ -12,6 +12,7 @@ import {
   MessageFlags,
   type Client,
   type Message,
+  type MessageActionRowComponentBuilder,
   ChannelType,
 } from 'discord.js'
 import Asociacion, { type AsociacionDocument } from '../models/Asociacion'
@@ -249,16 +250,24 @@ export function buildEditorPayload(
   const next = unix(a.nextRenovationDate)
   const dotId = asocId(a)
 
+  const campos = [
+    new StringSelectMenuOptionBuilder().setLabel('Nombre').setValue('nombre').setEmoji('🏷️'),
+    new StringSelectMenuOptionBuilder().setLabel('Representante').setValue('representante').setEmoji('👤'),
+    new StringSelectMenuOptionBuilder().setLabel('Staff encargado').setValue('staff-encargado').setEmoji('🛠️'),
+    new StringSelectMenuOptionBuilder().setLabel('Canal').setValue('canal').setEmoji('📢'),
+    new StringSelectMenuOptionBuilder().setLabel('Frecuencia de renovación').setValue('renovacion').setEmoji('⏱️')
+  ]
+  if (a.representanteId) {
+    campos.push(new StringSelectMenuOptionBuilder().setLabel('Quitar representante').setValue('quitar-representante').setEmoji('🚫'))
+  }
+  if (a.staffEncargadoId) {
+    campos.push(new StringSelectMenuOptionBuilder().setLabel('Quitar staff encargado').setValue('quitar-staff-encargado').setEmoji('🚫'))
+  }
+
   const select = new StringSelectMenuBuilder()
     .setCustomId(`asoc-edit-campo:${dotId}`)
     .setPlaceholder('Selecciona el campo a editar')
-    .addOptions(
-      new StringSelectMenuOptionBuilder().setLabel('Nombre').setValue('nombre').setEmoji('🏷️'),
-      new StringSelectMenuOptionBuilder().setLabel('Representante').setValue('representante').setEmoji('👤'),
-      new StringSelectMenuOptionBuilder().setLabel('Staff encargado').setValue('staff-encargado').setEmoji('🛠️'),
-      new StringSelectMenuOptionBuilder().setLabel('Canal').setValue('canal').setEmoji('📢'),
-      new StringSelectMenuOptionBuilder().setLabel('Frecuencia de renovación').setValue('renovacion').setEmoji('⏱️')
-    )
+    .addOptions(campos)
 
   const buttons: ButtonBuilder[] = [new ButtonBuilder().setCustomId(`asoc-btn-ver:${dotId}`).setLabel('Ver tarjeta').setStyle(ButtonStyle.Secondary)]
   if (canDelete) {
@@ -277,6 +286,23 @@ export function buildEditorPayload(
     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
     .addActionRowComponents(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select))
     .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(buttons))
+
+  return { flags: MessageFlags.IsComponentsV2, components: [container] }
+}
+
+// Tarjeta V2 simple (texto + acción opcional)
+export function buildMessageCard(
+  content: string,
+  { color = ASOCIACIONES_COLOR, actionRow }: {
+    color?: number
+    actionRow?: ActionRowBuilder<MessageActionRowComponentBuilder>
+  } = {}
+): { flags: number, components: Container[] } {
+  const container = new ContainerBuilder()
+    .setAccentColor(color)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(content))
+
+  if (actionRow) container.addActionRowComponents(actionRow)
 
   return { flags: MessageFlags.IsComponentsV2, components: [container] }
 }

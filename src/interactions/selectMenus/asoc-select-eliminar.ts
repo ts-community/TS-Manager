@@ -14,6 +14,6 @@ export default {
     if (!asociacion) return void interaction.reply({ content: 'Esta asociación ya no existe.' })
 
     const confirm = buildRemoveConfirmPayload(asociacion)
-    await interaction.followUp(confirm as never)
+    await interaction.reply(confirm as never)
   }
 }

@@ -1,11 +1,42 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js'
 import type { PrefixCommand } from '../../../types/commands'
 
+const ROLE_ID = '1173666295556866089'
+const GENERAL_CHANNEL_NAME = 'general'
+const COOLDOWN_MS = 24 * 60 * 60 * 1000
+
+/** Última vez que se envió el ping del rol en este proceso. */
+let lastSentAt = 0
+
 export default {
   description: 'Menciona al rol revivirchat con un mensaje',
-  cooldown: 300, // 5 min por usuario (el sistema actual solo soporta cooldown por usuario)
 
   async execute(message, args) {
+    if (!message.inGuild()) return
+
+    if (message.channel.isThread() || message.channel.name.toLowerCase() !== GENERAL_CHANNEL_NAME) {
+      await message.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor('Yellow')
+            .setDescription('Este comando solo se puede usar en el canal #general.')
+        ]
+      })
+      return
+    }
+
+    const remaining = lastSentAt + COOLDOWN_MS - Date.now()
+    if (lastSentAt > 0 && remaining > 0) {
+      await message.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor('Yellow')
+            .setDescription(`Ya se envió un @revivirchat hace poco. Podrás volver a usarlo <t:${Math.floor((lastSentAt + COOLDOWN_MS) / 1000)}:R>.`)
+        ]
+      })
+      return
+    }
+
     const text = args.join(' ').trim()
 
     if (!text) {
@@ -19,11 +50,7 @@ export default {
       return
     }
 
-    if (!message.guild) return
-
-    const roleId = '1173666295556866089'
-
-    const content = `<@&${roleId}> ${text}`
+    const content = `<@&${ROLE_ID}> ${text}`
     if (content.length > 2000) {
       await message.reply({
         embeds: [
@@ -49,7 +76,9 @@ export default {
     await message.channel.send({
       content,
       components: [row],
-      allowedMentions: { roles: [roleId] }
+      allowedMentions: { roles: [ROLE_ID] }
     })
+
+    lastSentAt = Date.now()
   }
 } satisfies PrefixCommand

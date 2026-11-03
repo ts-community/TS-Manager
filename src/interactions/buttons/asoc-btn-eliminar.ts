@@ -14,6 +14,6 @@ export default {
     }
 
     const confirm = buildRemoveConfirmPayload(asociacion)
-    await interaction.followUp(confirm as never)
+    await interaction.reply(confirm as never)
   }
 }

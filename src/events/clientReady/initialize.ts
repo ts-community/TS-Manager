@@ -49,8 +49,9 @@ export default {
 
     const setRandomStatus = () => {
       if (!client.user) return
+      const text = actividades[Math.floor(Math.random() * actividades.length)]
       client.user.setPresence({
-        activities: [{ name: actividades[Math.floor(Math.random() * actividades.length)], type: ActivityType.Watching }]
+        activities: [{ name: text, state: text, type: ActivityType.Custom }]
       })
     }
 

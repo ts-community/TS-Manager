@@ -36,7 +36,7 @@ export default {
     }
 
     if (asociaciones.length === 1) {
-      return void interaction.update(buildAssociationDetailPayload(asociaciones[0]))
+      return void interaction.update(buildAssociationDetailPayload(asociaciones[0], { canEdit: true, canDelete: true }))
     }
 
     const menu = new StringSelectMenuBuilder()

@@ -2,7 +2,8 @@ import type { Client, Message } from 'discord.js'
 import type { Event } from '../../types/events'
 import {
   BUSCAR_EQUIPO_CHANNEL_ID,
-  BUSCAR_EQUIPO_ROLE_ID
+  BUSCAR_EQUIPO_ROLE_ID,
+  checkSearchCooldown
 } from '../../services/buscarEquipo'
 import { prefix } from '../../config/env'
 import { mlTeamSearch } from '../../ml/index'
@@ -17,6 +18,8 @@ const REDIRECT_MIN_SCORE = 0.85
 const REDIRECT_COOLDOWN_MS = 30 * 60 * 1000
 /** Señales de Brawl Stars en el texto (juego, abreviaturas, modos, rangos, objetos...). */
 const BRAWL_CONTEXT = /\b(brawl(?:s|\s*stars)?|brawlers?|bs|p(?:1[01]|[1-9])|copas?|trofeos?|pushe(?:ar|o|ando|amos)|m[ií]tic[oa]s?|legendari[oa]s?|atrapagemas|bal[oó]n brawl|brawlball|noqueo|supervivencia|asedio|caza estelar|supercell|3v3|gadgets?|star ?powers?|hipercargas?|maxe(?:ar|ado|ando|o))\b|b\.\s?s\.?/iu
+/** Mensajes sobre clubes no son búsquedas de equipo. */
+const CLUB_CONTEXT = /\b(?:clubs?|clubes|clans?|clanes)\b/iu
 
 /** Sesión de búsqueda: se abre con el primer ping y se cierra tras un rato sin actividad. */
 let sessionStartedAt = 0
@@ -61,6 +64,7 @@ async function maybeRedirect(message: Message<true>): Promise<void> {
   const content = message.content.trim()
   if (!content || content.length > MAX_TEXT_LENGTH) return
   if (content.startsWith(prefix)) return
+  if (CLUB_CONTEXT.test(content)) return
   if (!hasBrawlContext(content)) return
 
   const { score } = mlTeamSearch.predict(content, REDIRECT_MIN_SCORE)
@@ -68,7 +72,7 @@ async function maybeRedirect(message: Message<true>): Promise<void> {
   if (!canRedirect(message.author.id, Date.now())) return
 
   await message.reply({
-    content: `Si buscas equipo para jugar a Brawl Stars, puedes hacerlo en el canal <#${BUSCAR_EQUIPO_CHANNEL_ID}>. Así te verá más gente.`,
+    content: `Si buscas equipo para jugar a Brawl Stars, puedes hacerlo en el canal <#${BUSCAR_EQUIPO_CHANNEL_ID}>.`,
     allowedMentions: { parse: [] }
   }).catch(() => null)
 }
@@ -89,6 +93,7 @@ export default {
     if (sessionOpen) lastActivityAt = now
 
     if (message.mentions.roles.has(BUSCAR_EQUIPO_ROLE_ID)) {
+      if (!(await checkSearchCooldown(message, now))) return
       if (!sessionOpen) openSession(now)
       return
     }
@@ -100,6 +105,8 @@ export default {
 
     const { decision } = mlTeamSearch.predict(content)
     if (decision !== 'looking') return
+
+    if (!(await checkSearchCooldown(message, now))) return
 
     openSession(now)
 

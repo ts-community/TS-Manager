@@ -27,7 +27,7 @@ export default {
     asociacion.servidor = nuevoNombre
     await asociacion.save()
     schedulePanelsSync(interaction.client)
-    if (interaction.isFromMessage()) return void interaction.update(buildEditorPayload(asociacion))
+    if (interaction.isFromMessage()) return void interaction.update(buildEditorPayload(asociacion, { canDelete: true }))
     await interaction.reply({ content: `Nombre actualizado a **${nuevoNombre}**.` })
   }
 }

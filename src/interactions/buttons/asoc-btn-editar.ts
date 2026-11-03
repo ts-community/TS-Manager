@@ -13,6 +13,6 @@ export default {
       return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.' })
     }
 
-    await interaction.update(buildEditorPayload(asociacion))
+    await interaction.update(buildEditorPayload(asociacion, { canDelete: true }))
   }
 }

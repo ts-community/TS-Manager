@@ -1,6 +1,7 @@
 import {
   ActionRowBuilder,
   ChannelSelectMenuBuilder,
+  ChannelType,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -8,7 +9,7 @@ import {
   type StringSelectMenuInteraction
 } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
-import { schedulePanelsSync, buildEditorPayload, capitalizeName } from '../../services/asociaciones'
+import { EMOJI, schedulePanelsSync, buildEditorPayload, buildMessageCard, capitalizeName } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
 // Editor de campos de una asociación (solo staff). CustomId: asoc-edit-campo:{asociacionId}
@@ -55,35 +56,41 @@ export default {
         return void interaction.showModal(modal)
       }
       case 'canal':
-        return void interaction.update({
-          components: [new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
-            new ChannelSelectMenuBuilder()
-              .addChannelTypes(0)
-              .setCustomId(`asoc-edit-canal:${asociacion.id}`)
-              .setPlaceholder('Selecciona el nuevo canal')
-          )]
-        })
+        return void interaction.update(buildMessageCard(
+          `### ${EMOJI.canal} Nuevo canal para ${capitalizeName(asociacion.servidor)}\n-# Selecciona el canal de texto que quieres asignar.`,
+          {
+            actionRow: new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
+              new ChannelSelectMenuBuilder()
+                .addChannelTypes(ChannelType.GuildText)
+                .setCustomId(`asoc-edit-canal:${asociacion.id}`)
+                .setPlaceholder('Selecciona el nuevo canal')
+            )
+          }
+        ) as never)
       case 'representante':
       case 'staff-encargado': {
         const fieldLabel = campo === 'representante' ? 'representante' : 'staff encargado'
-        return void interaction.update({
-          components: [new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
-            new UserSelectMenuBuilder()
-              .setCustomId(`asoc-edit-usuario:${campo}:${asociacion.id}`)
-              .setPlaceholder(`Selecciona el nuevo ${fieldLabel}`)
-          )]
-        })
+        return void interaction.update(buildMessageCard(
+          `### ${EMOJI.asociacion} Nuevo ${fieldLabel} de ${capitalizeName(asociacion.servidor)}\n-# Selecciona el miembro que quieres asignar.`,
+          {
+            actionRow: new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+              new UserSelectMenuBuilder()
+                .setCustomId(`asoc-edit-usuario:${campo}:${asociacion.id}`)
+                .setPlaceholder(`Selecciona el nuevo ${fieldLabel}`)
+            )
+          }
+        ) as never)
       }
       case 'quitar-representante':
         asociacion.representanteId = null
         await asociacion.save()
         schedulePanelsSync(interaction.client)
-        return void interaction.update(buildEditorPayload(asociacion))
+        return void interaction.update(buildEditorPayload(asociacion, { canDelete: true }))
       case 'quitar-staff-encargado':
         asociacion.staffEncargadoId = null
         await asociacion.save()
         schedulePanelsSync(interaction.client)
-        return void interaction.update(buildEditorPayload(asociacion))
+        return void interaction.update(buildEditorPayload(asociacion, { canDelete: true }))
     }
   }
 }

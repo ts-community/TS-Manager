@@ -27,7 +27,7 @@ export default {
     await asociacion.save()
     schedulePanelsSync(interaction.client)
 
-    await interaction.update(buildEditorPayload(asociacion))
+    await interaction.update(buildEditorPayload(asociacion, { canDelete: true }))
   }
 }
 

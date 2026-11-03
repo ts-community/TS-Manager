@@ -15,8 +15,8 @@ export default {
     if (!asociacion) return void interaction.reply({ content: 'Esta asociación ya no existe.' })
 
     const dias = parseInt(interaction.fields.getTextInputValue('dias').trim(), 10)
-    if (!Number.isFinite(dias) || dias < 1 || dias > 9999) {
-      return void interaction.reply({ content: 'Introduce un número de días válido (1-9999).' })
+    if (!Number.isFinite(dias) || dias < 1 || dias > 365) {
+      return void interaction.reply({ content: 'Introduce un número de días válido (1-365).' })
     }
 
     asociacion.renovacionDias = dias
@@ -24,7 +24,7 @@ export default {
     asociacion.renovacionAvisada = false
     await asociacion.save()
     schedulePanelsSync(interaction.client)
-    if (interaction.isFromMessage()) return void interaction.update(buildEditorPayload(asociacion))
+    if (interaction.isFromMessage()) return void interaction.update(buildEditorPayload(asociacion, { canDelete: true }))
     await interaction.reply({ content: `Frecuencia actualizada a **cada ${dias} días**.` })
   }
 }
