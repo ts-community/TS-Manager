@@ -6,6 +6,7 @@ import { runChannelPurges } from '../../services/purge'
 import { checkBumpReminders } from '../../services/bumps'
 import { scanNextTagMember } from '../../services/tagRole'
 import { checkDueAsociaciones, checkRepresentantesAusentes } from '../../services/asociaciones'
+import { syncPresenceStats } from '../../services/serverStats'
 
 const SECOND = 1000
 const MINUTE = 60 * SECOND
@@ -21,7 +22,8 @@ export default {
 
     runInterval([
       runChannelPurges.bind(null, client),
-      checkBumpReminders.bind(null, client)
+      checkBumpReminders.bind(null, client),
+      syncPresenceStats.bind(null, client)
     ], MINUTE)
 
     runInterval([
