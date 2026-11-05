@@ -30,3 +30,6 @@ pnpm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+# Copias de .env con secretos
+.env.*
+!.env.example
