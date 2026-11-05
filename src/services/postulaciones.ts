@@ -13,6 +13,7 @@ import {
   type User
 } from 'discord.js'
 import { internalApiKey, tsApiUrl } from '../config/env'
+import mongoose from 'mongoose'
 import logger from '../utils/logger'
 
 export type PostulacionDecision = 'accept' | 'decline'
@@ -132,33 +133,54 @@ export async function showPostulacionModal(
 
 async function syncApplicationStatus(
   applicationId: string | null,
+  discordMessageId: string | null,
   status: 'accepted' | 'rejected',
   reviewedBy: string
 ): Promise<boolean> {
-  if (!applicationId) return false
-  if (!internalApiKey) {
-    logger.warn('INTERNAL_API_KEY no configurada: no se sincronizó la postulación')
-    return false
+  if (applicationId && internalApiKey) {
+    try {
+      const response = await fetch(
+        `${tsApiUrl.replace(/\/+$/, '')}/api/panel/applications/${applicationId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-internal-key': internalApiKey
+          },
+          body: JSON.stringify({ status, reviewedBy }),
+          signal: AbortSignal.timeout(8000)
+        }
+      )
+
+      if (!response.ok) throw new Error(`API ${response.status}`)
+      return true
+    } catch (error) {
+      logger.error('No se pudo sincronizar la postulación con la API', {
+        message: error instanceof Error ? error.message : String(error)
+      })
+    }
+  } else if (!internalApiKey) {
+    logger.warn('INTERNAL_API_KEY no configurada: se sincronizará directamente en MongoDB')
   }
 
+  // Respaldo: el bot comparte la base de datos con la API, así que el estado
+  // se guarda igualmente aunque la API no esté disponible.
   try {
-    const response = await fetch(
-      `${tsApiUrl.replace(/\/+$/, '')}/api/admin/applications/${applicationId}`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-internal-key': internalApiKey
-        },
-        body: JSON.stringify({ status, reviewedBy }),
-        signal: AbortSignal.timeout(8000)
-      }
-    )
+    const filter = applicationId && mongoose.isValidObjectId(applicationId)
+      ? { _id: new mongoose.Types.ObjectId(applicationId) }
+      : discordMessageId
+        ? { discordMessageId }
+        : null
 
-    if (!response.ok) throw new Error(`API ${response.status}`)
-    return true
+    if (!filter) return false
+
+    const result = await mongoose.connection.collection('applications').updateOne(
+      filter,
+      { $set: { status, reviewedBy, updatedAt: new Date() } }
+    )
+    return result.matchedCount > 0
   } catch (error) {
-    logger.error('No se pudo sincronizar la postulación con la API', {
+    logger.error('No se pudo sincronizar la postulación en MongoDB', {
       message: error instanceof Error ? error.message : String(error)
     })
     return false
@@ -262,6 +284,7 @@ export async function handlePostulacionSubmit(interaction: ModalSubmitInteractio
 
     const synced = await syncApplicationStatus(
       applicationId,
+      interaction.message?.id ?? null,
       decision === 'accept' ? 'accepted' : 'rejected',
       authorName
     )
@@ -269,7 +292,7 @@ export async function handlePostulacionSubmit(interaction: ModalSubmitInteractio
     if (dmFailed || !synced) {
       const warnings = [
         dmFailed ? 'no se pudo contactar con el usuario por MD' : null,
-        !synced ? 'no se pudo sincronizar el estado con la API' : null
+        !synced ? 'no se pudo guardar el estado en el panel web' : null
       ].filter(Boolean)
 
       await interaction.followUp({

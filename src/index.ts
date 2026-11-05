@@ -6,23 +6,6 @@ import loadEvents from './handlers/events'
 
 import logger from './utils/logger'
 
-const PRESENCE_FLAGS = (1 << 12) | (1 << 13)
-
-async function presenceIntentAllowed(): Promise<boolean> {
-  try {
-    const response = await fetch('https://discord.com/api/v10/oauth2/applications/@me', {
-      headers: { Authorization: `Bot ${token}` },
-      signal: AbortSignal.timeout(8000)
-    })
-    if (!response.ok) return false
-
-    const application = await response.json() as { flags?: number }
-    return typeof application.flags === 'number' && (application.flags & PRESENCE_FLAGS) !== 0
-  } catch {
-    return false
-  }
-}
-
 const intents = [
   GatewayIntentBits.Guilds,
   GatewayIntentBits.GuildMessages,
@@ -30,12 +13,6 @@ const intents = [
   GatewayIntentBits.GuildMembers,
   GatewayIntentBits.MessageContent
 ]
-
-if (await presenceIntentAllowed()) {
-  intents.push(GatewayIntentBits.GuildPresences)
-} else {
-  logger.info('Presence Intent no habilitado: el online exacto se obtendrá del widget del servidor')
-}
 
 const client = new Client({
   intents,
