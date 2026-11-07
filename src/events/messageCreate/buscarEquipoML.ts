@@ -3,7 +3,9 @@ import type { Event } from '../../types/events'
 import {
   BUSCAR_EQUIPO_CHANNEL_ID,
   BUSCAR_EQUIPO_ROLE_ID,
-  checkSearchCooldown
+  enforceManualSearchCooldown,
+  isSearchOnCooldown,
+  registerSearch
 } from '../../services/buscarEquipo'
 import { prefix } from '../../config/env'
 import { mlTeamSearch } from '../../ml/index'
@@ -93,7 +95,7 @@ export default {
     if (sessionOpen) lastActivityAt = now
 
     if (message.mentions.roles.has(BUSCAR_EQUIPO_ROLE_ID)) {
-      if (!(await checkSearchCooldown(message, now))) return
+      if (!(await enforceManualSearchCooldown(message, now))) return
       if (!sessionOpen) openSession(now)
       return
     }
@@ -106,7 +108,9 @@ export default {
     const { decision } = mlTeamSearch.predict(content)
     if (decision !== 'looking') return
 
-    if (!(await checkSearchCooldown(message, now))) return
+    if (isSearchOnCooldown(message.author.id, now)) return
+
+    registerSearch(message.author.id, now)
 
     openSession(now)
 
