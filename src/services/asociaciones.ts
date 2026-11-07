@@ -411,17 +411,18 @@ export function buildAssociationsListPayload(
 ): { flags: number, components: Container[] } {
   const shown = asociaciones.slice(0, 25)
   const containers: Container[] = []
-  let builder: ContainerBuilder = new ContainerBuilder().setAccentColor(ASOCIACIONES_COLOR)
   let length = 0
   let blocks = 0
 
-  const openContainer = () => {
-    builder = new ContainerBuilder().setAccentColor(ASOCIACIONES_COLOR)
-    containers.push(builder)
+  const openContainer = (): ContainerBuilder => {
+    const container = new ContainerBuilder().setAccentColor(ASOCIACIONES_COLOR)
+    containers.push(container)
     length = 0
     blocks = 0
+    return container
   }
 
+  let builder = openContainer()
   builder.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(`## ${EMOJI.asociacion} ${title} (${asociaciones.length})`)
   )
@@ -441,7 +442,7 @@ export function buildAssociationsListPayload(
       `${EMOJI.ultima} **Última renovación:** <t:${last}:R>`
     ].join('\n')
 
-    if (length + content.length + 40 > MAX_CONTAINER_CHARS) openContainer()
+    if (length + content.length + 40 > MAX_CONTAINER_CHARS) builder = openContainer()
     if (blocks > 0) builder.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
     builder.addTextDisplayComponents(new TextDisplayBuilder().setContent(content))
     length += content.length + 40

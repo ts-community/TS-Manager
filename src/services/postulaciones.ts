@@ -257,11 +257,6 @@ export async function handlePostulacionSubmit(interaction: ModalSubmitInteractio
       )
       .setColor(color)
 
-    const panelUrl = interaction.message?.components
-      .flatMap(row => ('components' in row ? (row.components as unknown[]) : []))
-      .map(component => (component && typeof component === 'object' && 'url' in component ? (component as { url: string | null }).url : null))
-      .find((url): url is string => !!url)
-
     const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId('accept')
@@ -274,6 +269,10 @@ export async function handlePostulacionSubmit(interaction: ModalSubmitInteractio
         .setStyle(ButtonStyle.Danger)
         .setDisabled(true)
     )
+    const panelUrl = interaction.message?.components
+      .flatMap(row => ('components' in row ? (row.components as unknown[]) : []))
+      .map(component => (component && typeof component === 'object' && 'url' in component ? (component as { url: string | null }).url : null))
+      .find((url): url is string => !!url)
     if (panelUrl) disabledRow.addComponents(new ButtonBuilder().setLabel('Ver en el panel').setURL(panelUrl).setStyle(ButtonStyle.Link))
 
     await interaction.message?.edit({
