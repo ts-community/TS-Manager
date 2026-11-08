@@ -23,5 +23,6 @@
       "#types/*": ["src/types/*"]
     }
   },
-  "include": ["src", "tsup.config.ts"]
+  "include": ["src", "tsup.config.ts"],
+  "exclude": ["src/services/inscriptions.ts"]
 }
