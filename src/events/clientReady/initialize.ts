@@ -6,7 +6,6 @@ import logger from '../../utils/logger'
 import { publishServiceThreads } from '../../services/services'
 import { schedulePanelsSync } from '../../services/asociaciones'
 import { startTagRoleManager } from '../../services/tagRole'
-import { publishInscriptionPanel } from '../../services/inscriptions'
 
 const RESTART_NOTIFY_CHANNEL_ID = '1235177703045599304'
 
@@ -43,12 +42,6 @@ export default {
     // Sincroniza los paneles a los 15s de arrancar (con debounce para no re-renderizar por cada cambio)
     // Va después de conectar la BD porque syncPanels consulta las asociaciones
     schedulePanelsSync(client, 15_000)
-
-    publishInscriptionPanel(client)
-      .then(() => logger.success('Paneles de verificación e inscripciones publicados'))
-      .catch(error => logger.error('No se pudo publicar el panel de inscripciones', {
-        reason: error instanceof Error ? error.message : 'Unknown error'
-      }))
 
     // El gestor del rol por etiqueta TS no debe bloquear/fallar el resto del arranque
     startTagRoleManager(client).catch(error => {

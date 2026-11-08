@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsup",
+    "build": "tsc --noEmit && tsup",
     "start": "pm2 start ecosystem.config.cjs"
   },
   "keywords": [
