@@ -9,6 +9,8 @@ const lastPurgedAt = new Map<string, number>()
 export async function runChannelPurges(client: Client): Promise<void> {
   const config = await getGuildConfig()
   const now = Date.now()
+  // Los paneles del bot (verificación, inscripciones) nunca se borran
+  const protectedIds = new Set([config.verificationPanelMessageId, config.inscriptionPanelMessageId].filter(Boolean))
 
   for (const { channelId, intervalMinutes } of config.purgeChannels) {
     const last = lastPurgedAt.get(channelId) ?? 0
@@ -36,7 +38,7 @@ export async function runChannelPurges(client: Client): Promise<void> {
 
     // El canal de buscar equipo nunca se purgea con este sistema.
     const deletable = messages.filter(
-      m => !m.pinned && channelId !== BUSCAR_EQUIPO_CHANNEL_ID
+      m => !m.pinned && !protectedIds.has(m.id) && channelId !== BUSCAR_EQUIPO_CHANNEL_ID
     )
     if (deletable.size === 0) continue
 
