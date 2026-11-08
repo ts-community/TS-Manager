@@ -16,6 +16,10 @@ export interface GuildConfig {
   clubTags: Array<string | ClubTagEntry>
   purgeChannels: PurgeChannelConfig[]
   starboardThreshold: number
+  verifiedRoleId: string | null
+  verificationThreadId: string | null
+  inscriptionPanelMessageId: string | null
+  verificationPanelMessageId: string | null
 }
 
 const purgeChannelSchema = new mongoose.Schema<PurgeChannelConfig>({
@@ -28,7 +32,11 @@ const guildSchema = new mongoose.Schema<GuildConfig>({
   staffRoleIds: { type: [String], default: [] },
   clubTags: { type: [mongoose.Schema.Types.Mixed], default: [] },
   purgeChannels: { type: [purgeChannelSchema], default: [] },
-  starboardThreshold: { type: Number, default: 3 }
+  starboardThreshold: { type: Number, default: 3 },
+  verifiedRoleId: { type: String, default: null },
+  verificationThreadId: { type: String, default: null },
+  inscriptionPanelMessageId: { type: String, default: null },
+  verificationPanelMessageId: { type: String, default: null }
 })
 
 export type GuildDocument = mongoose.HydratedDocument<GuildConfig>
