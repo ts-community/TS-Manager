@@ -405,31 +405,27 @@ export function buildAssociationDetailPayload(
 }
 
 // Lista V2 de asociaciones (mismo estilo que el hilo en vivo, sin estado de renovación)
+const MAX_MESSAGE_COMPONENTS = 40
+const MAX_MESSAGE_TEXT = 3900
+
 export function buildAssociationsListPayload(
   asociaciones: AsociacionLike[],
   { title, menu }: { title: string, menu?: StringSelectMenuBuilder } = { title: 'Asociaciones' }
 ): { flags: number, components: Container[] } {
-  const shown = asociaciones.slice(0, 25)
-  const containers: Container[] = []
-  let length = 0
-  let blocks = 0
+  const header = `## ${EMOJI.asociacion} ${title} (${asociaciones.length})`
+  const container = new ContainerBuilder().setAccentColor(ASOCIACIONES_COLOR)
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(header))
+  container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
 
-  const openContainer = (): ContainerBuilder => {
-    const container = new ContainerBuilder().setAccentColor(ASOCIACIONES_COLOR)
-    containers.push(container)
-    length = 0
-    blocks = 0
-    return container
-  }
+  // El contenedor, la cabecera y su separador ya ocupan 3 componentes.
+  let componentCount = 3
+  let textLength = header.length
+  // Reserva para el menú (ActionRow + select) y para el aviso de truncado.
+  const reservedComponents = (menu ? 2 : 0) + 1
+  const reservedText = 120
 
-  let builder = openContainer()
-  builder.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(`## ${EMOJI.asociacion} ${title} (${asociaciones.length})`)
-  )
-  builder.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
-  length += title.length + String(asociaciones.length).length + 25
-
-  for (const a of shown) {
+  const contents: string[] = []
+  for (const a of asociaciones.slice(0, 25)) {
     const next = unix(a.nextRenovationDate)
     const last = unix(a.lastRenovationDate)
     const content = [
@@ -442,20 +438,32 @@ export function buildAssociationsListPayload(
       `${EMOJI.ultima} **Última renovación:** <t:${last}:R>`
     ].join('\n')
 
-    if (length + content.length + 40 > MAX_CONTAINER_CHARS) builder = openContainer()
-    if (blocks > 0) builder.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
-    builder.addTextDisplayComponents(new TextDisplayBuilder().setContent(content))
-    length += content.length + 40
-    blocks++
+    // El primer bloque no lleva separador; los siguientes sí.
+    const addedComponents = contents.length === 0 ? 1 : 2
+    if (
+      componentCount + addedComponents + reservedComponents > MAX_MESSAGE_COMPONENTS ||
+      textLength + content.length + reservedText > MAX_MESSAGE_TEXT
+    ) break
+
+    contents.push(content)
+    componentCount += addedComponents
+    textLength += content.length
   }
 
-  if (asociaciones.length > shown.length) {
-    builder.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Mostrando ${shown.length} de ${asociaciones.length} asociaciones.`))
+  contents.forEach((content, index) => {
+    if (index > 0) container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(content))
+  })
+
+  if (contents.length < asociaciones.length) {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `-# Mostrando ${contents.length} de ${asociaciones.length} asociaciones. Usa el menú para consultar el resto.`
+    ))
   }
 
-  if (menu) builder.addActionRowComponents(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu))
+  if (menu) container.addActionRowComponents(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu))
 
-  return { flags: MessageFlags.IsComponentsV2, components: containers }
+  return { flags: MessageFlags.IsComponentsV2, components: [container] }
 }
 
 // ===== Panel types & functions (fusionados de asociacionesPanel.ts) =====

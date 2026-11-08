@@ -50,14 +50,9 @@ async function buildAsociacionesStaffPayload(
   const staffName = member?.displayName ?? `<@${memberId}>`
 
   if (!asociaciones.length) {
-    return {
-      embeds: [greenEmbed()
-        .setTitle(`${EMOJI.asociacion} Sin asociaciones`)
-        .setDescription(`**${staffName}** todavía no participa en ninguna asociación.`)
-        .setTimestamp()
-      ],
-      components: []
-    }
+    return buildMessageCard(
+      `## ${EMOJI.asociacion} Sin asociaciones\n\n**${staffName}** todavía no participa en ninguna asociación.`
+    )
   }
 
   if (asociaciones.length === 1) {
@@ -185,23 +180,23 @@ export default {
       if (asociacionParam) {
         const asociacion = await findAsociacion(asociacionParam)
         if (!asociacion) {
-          return void reply(`No se encontró ninguna asociación con \`${asociacionParam}\`.`)
+          return reply(`No se encontró ninguna asociación con \`${asociacionParam}\`.`)
         }
 
-        return void interaction.editReply(
+        return interaction.editReply(
           buildAssociationDetailPayload(asociacion, { canEdit: true, canDelete: true }) as never
         )
       }
 
       if (staffUser) {
-        return void interaction.editReply(await buildAsociacionesStaffPayload(interaction, staffUser.id) as never)
+        return interaction.editReply(await buildAsociacionesStaffPayload(interaction, staffUser.id) as never)
       }
 
       // Sin parámetros: menú para elegir el staff/miembro
       const menu = new UserSelectMenuBuilder()
         .setCustomId(STAFF_MENU_ID)
         .setPlaceholder('Selecciona el staff o miembro a consultar')
-      return void interaction.editReply(buildMessageCard(
+      return interaction.editReply(buildMessageCard(
         `# ${EMOJI.asociacion} ¿A quién consultamos?\n\n` +
         'Elige a un miembro del menú de abajo y verás sus asociaciones; si gestiona varias, podrás elegir una para ver toda la info con botones de editar/eliminar.',
         { actionRow: new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(menu) }
@@ -227,11 +222,11 @@ export default {
       } else {
         // Creamos un canal nuevo con el formato 「emoji」nombre-con-guiones
         if (!emoji || !nombreOpt) {
-          return void reply('Si no eliges un canal existente, debes indicar `emoji` y `nombre` para crear el canal nuevo.')
+          return reply('Si no eliges un canal existente, debes indicar `emoji` y `nombre` para crear el canal nuevo.')
         }
         const category = await interaction.guild.channels.fetch(ASOCIACIONES_CATEGORY_ID).catch(() => null)
         if (!category || category.type !== ChannelType.GuildCategory) {
-          return void reply('No se encontró la categoría de asociaciones configurada.')
+          return reply('No se encontró la categoría de asociaciones configurada.')
         }
 
         servidorDisplay = nombreOpt
@@ -247,7 +242,7 @@ export default {
 
       const duplicada = await Asociacion.findOne(servidorFilter(servidorDisplay))
       if (duplicada) {
-        return void reply(`Ya existe una asociación guardada con el nombre "${servidorDisplay}".`)
+        return reply(`Ya existe una asociación guardada con el nombre "${servidorDisplay}".`)
       }
 
       const lastMessageDate = await getLastMessageDate(canal)
@@ -275,7 +270,7 @@ export default {
 
       schedulePanelsSync(interaction.client)
 
-      return void interaction.editReply(buildAssociationDetailPayload(asociacion, {
+      return interaction.editReply(buildAssociationDetailPayload(asociacion, {
         canEdit: true,
         canDelete: true,
         intro: '✅ **Asociación creada correctamente.**',
@@ -287,7 +282,7 @@ export default {
     if (sub === 'editar') {
       const nombreOpt = interaction.options.getString('nombre', true)
       const asociacion = await findAsociacion(nombreOpt)
-      if (!asociacion) return void reply(`No se encontró ninguna asociación con \`${nombreOpt}\`.`)
+      if (!asociacion) return reply(`No se encontró ninguna asociación con \`${nombreOpt}\`.`)
 
       const nuevoNombreRaw = interaction.options.getString('nuevo-nombre')?.trim()
       const nuevoNombre = nuevoNombreRaw ? capitalizeName(nuevoNombreRaw) : null
@@ -297,13 +292,13 @@ export default {
       const nuevoCanal = interaction.options.getChannel('nuevo-canal')
 
       if (!nuevoNombre && !nuevoRepresentante && !nuevoEncargado && !nuevaDuracion && !nuevoCanal) {
-        return void reply('Indica al menos un campo a editar: `nuevo-nombre`, `nuevo-representante`, `nuevo-encargado`, `nueva-duracion` o `nuevo-canal`.')
+        return reply('Indica al menos un campo a editar: `nuevo-nombre`, `nuevo-representante`, `nuevo-encargado`, `nueva-duracion` o `nuevo-canal`.')
       }
 
       if (nuevoNombre && nuevoNombre.toLowerCase() !== asociacion.servidor.toLowerCase()) {
         const duplicada = await Asociacion.findOne({ ...servidorFilter(nuevoNombre), _id: { $ne: asociacion._id } })
         if (duplicada) {
-          return void reply(`Ya existe otra asociación guardada con el nombre "${nuevoNombre}".`)
+          return reply(`Ya existe otra asociación guardada con el nombre "${nuevoNombre}".`)
         }
       }
 
@@ -339,7 +334,7 @@ export default {
       }
 
       if (!cambios.length) {
-        return void reply('No hay nada que cambiar: todos los campos indicados ya tenían esos valores.')
+        return reply('No hay nada que cambiar: todos los campos indicados ya tenían esos valores.')
       }
 
       await asociacion.save()
@@ -354,7 +349,7 @@ export default {
         ).setTimestamp()
       )
 
-      return void interaction.editReply(buildAssociationDetailPayload(asociacion, {
+      return interaction.editReply(buildAssociationDetailPayload(asociacion, {
         canEdit: true,
         canDelete: true,
         intro: `✏️ **Cambios aplicados**\n${cambios.join('\n')}`
@@ -365,9 +360,9 @@ export default {
     if (sub === 'eliminar') {
       const nombreOpt = interaction.options.getString('nombre', true)
       const asociacion = await findAsociacion(nombreOpt)
-      if (!asociacion) return void reply(`No se encontró ninguna asociación con \`${nombreOpt}\`.`)
+      if (!asociacion) return reply(`No se encontró ninguna asociación con \`${nombreOpt}\`.`)
 
-      return void interaction.editReply(buildRemoveConfirmPayload(asociacion) as never)
+      return interaction.editReply(buildRemoveConfirmPayload(asociacion) as never)
     }
   }
 } satisfies SlashCommand

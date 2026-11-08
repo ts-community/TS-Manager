@@ -7,8 +7,8 @@ import {
   EMOJI,
   buildAssociationDetailPayload,
   buildAssociationsListPayload,
-  capitalizeName,
-  greenEmbed
+  buildMessageCard,
+  capitalizeName
 } from '../../services/asociaciones'
 import { hasPermission } from '../../services/permissions'
 
@@ -18,7 +18,8 @@ export default {
     if (interaction.customId !== 'asoc-select-staff') return
 
     if (!await hasPermission(interaction, 'staff')) {
-      return void interaction.reply({ content: 'Solo el staff puede consultar las asociaciones.' })
+      await interaction.reply({ content: 'Solo el staff puede consultar las asociaciones.' })
+      return
     }
 
     const memberId = interaction.values[0]
@@ -26,17 +27,15 @@ export default {
 
     const asociaciones = await Asociacion.find({ staffEncargadoId: memberId }).sort({ servidor: 1 })
     if (!asociaciones.length) {
-      return void interaction.update({
-        embeds: [greenEmbed()
-          .setTitle(`${EMOJI.asociacion} Sin asociaciones`)
-          .setDescription(`${perfil?.displayName ?? `<@${memberId}>`} no gestiona ninguna asociación actualmente.`)
-          .setTimestamp()],
-        components: []
-      })
+      await interaction.update(buildMessageCard(
+        `## ${EMOJI.asociacion} Sin asociaciones\n\n${perfil?.displayName ?? `<@${memberId}>`} no gestiona ninguna asociación actualmente.`
+      ))
+      return
     }
 
     if (asociaciones.length === 1) {
-      return void interaction.update(buildAssociationDetailPayload(asociaciones[0], { canEdit: true, canDelete: true }))
+      await interaction.update(buildAssociationDetailPayload(asociaciones[0], { canEdit: true, canDelete: true }))
+      return
     }
 
     const menu = new StringSelectMenuBuilder()

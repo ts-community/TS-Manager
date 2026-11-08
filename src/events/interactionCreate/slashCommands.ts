@@ -56,10 +56,12 @@ export default {
         .setDescription('Ocurrió un error a la hora de ejecutar el comando')
 
       const reply = { embeds: [embed], ephemeral: true }
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(reply)
+      if (interaction.deferred && !interaction.replied) {
+        await interaction.editReply({ embeds: [embed] }).catch(() => interaction.followUp(reply).catch(() => {}))
+      } else if (interaction.replied) {
+        await interaction.followUp(reply).catch(() => {})
       } else {
-        await interaction.reply(reply)
+        await interaction.reply(reply).catch(() => {})
       }
     }
   }

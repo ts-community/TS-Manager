@@ -7,13 +7,15 @@ import { hasPermission } from '../../services/permissions'
 export default {
   async execute(interaction: StringSelectMenuInteraction): Promise<void> {
     if (!await hasPermission(interaction, 'staff')) {
-      return void interaction.reply({ content: 'Solo el staff puede consultar las asociaciones.' })
+      await interaction.reply({ content: 'Solo el staff puede consultar las asociaciones.' })
+      return
     }
 
     const asociacionId = interaction.values[0]
     const asociacion: AsociacionDocument | null = await Asociacion.findById(asociacionId)
     if (!asociacion) {
-      return void interaction.reply({ content: 'Esta asociación ya no existe.' })
+      await interaction.reply({ content: 'Esta asociación ya no existe.' })
+      return
     }
 
     await interaction.update(buildAssociationDetailPayload(asociacion, { canEdit: true, canDelete: true }))
