@@ -1,29 +1,50 @@
 import mongoose from 'mongoose'
+import type { TeamData, TeamMember } from '@/types/team'
 
-export interface TeamEntry {
-  guildId: string
-  name: string
-  captainId: string
-  /** 3 titulares (el capitán incluido) */
-  starters: string[]
-  /** 2 suplentes */
-  subs: string[]
-  /** Titulares + suplentes, para comprobar que nadie está en dos equipos */
-  players: string[]
-  createdAt: Date
-}
+const teamMemberSchema = new mongoose.Schema<TeamMember>({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  role: {
+    type: String,
+    enum: ['leader', 'member', 'substitute'],
+    required: true
+  }
+}, { _id: false })
 
-const teamSchema = new mongoose.Schema<TeamEntry>({
-  guildId: { type: String, required: true },
-  name: { type: String, required: true },
-  captainId: { type: String, required: true },
-  starters: { type: [String], required: true },
-  subs: { type: [String], required: true },
-  players: { type: [String], required: true },
-  createdAt: { type: Date, default: Date.now }
+const teamSchema = new mongoose.Schema<TeamData>({
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 32
+  },
+  members: {
+    type: [teamMemberSchema],
+    default: [],
+    validate: {
+      validator: (members: TeamMember[]) => {
+        const leaders = members.filter(member => member.role === 'leader').length
+        const substitutes = members.filter(member => member.role === 'substitute').length
+        const uniqueUsers = new Set(
+          members.map(member => member.userId.toString())
+        )
+
+        return (
+          members.length >= 1 &&
+          members.length <= 5 &&
+          leaders === 1 &&
+          substitutes <= 2 &&
+          uniqueUsers.size === members.length
+        )
+      },
+      message: 'El equipo debe tener un líder, máximo 5 integrantes y máximo 2 suplentes.'
+    }
+  }
 })
 
-teamSchema.index({ guildId: 1, players: 1 })
-teamSchema.index({ guildId: 1, name: 1 }, { unique: true, collation: { locale: 'es', strength: 2 } })
+export type TeamDocument = mongoose.HydratedDocument<TeamData>
 
-export default mongoose.model('Team', teamSchema)
+export default mongoose.model<TeamData>('Team', teamSchema)

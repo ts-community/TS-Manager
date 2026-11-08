@@ -1,16 +1,24 @@
 import type { Event } from '#types/events'
+
 import { runInterval } from '../../utils/interval'
-import { expireBlacklist } from '../../services/economyBlacklist'
-import { refreshBrawlStarsEmbed, refreshClubTemplate } from '../../services/clubs'
+
+import { expireBlacklist } from '../../services/blacklist'
+import {
+  refreshBrawlStarsEmbed,
+  refreshClubTemplate
+} from '../../services/clubs'
 import { runChannelPurges } from '../../services/purge'
 import { checkBumpReminders } from '../../services/bumps'
 import { scanNextTagMember } from '../../services/tagRole'
-import { checkDueAsociaciones, checkRepresentantesAusentes } from '../../services/asociaciones'
+import {
+  checkDueAsociaciones,
+  checkRepresentantesAusentes
+} from '../../services/asociaciones'
 
 const SECOND = 1000
 const MINUTE = 60 * SECOND
 const HOUR = 60 * MINUTE
-const DAY = 24 * 60 * MINUTE
+const DAY = 24 * HOUR
 
 // Todas las tareas periódicas del bot viven en sus módulos y se registran aquí.
 export default {
@@ -26,7 +34,7 @@ export default {
 
     runInterval([
       refreshBrawlStarsEmbed.bind(null, client),
-      refreshClubTemplate.bind(null, client),
+      refreshClubTemplate.bind(null, client)
     ], 15 * MINUTE)
 
     runInterval([
@@ -34,6 +42,8 @@ export default {
       checkDueAsociaciones.bind(null, client)
     ], HOUR)
 
-    runInterval([checkRepresentantesAusentes.bind(null, client)], DAY)
+    runInterval([
+      checkRepresentantesAusentes.bind(null, client)
+    ], DAY)
   }
 } satisfies Event<'clientReady'>

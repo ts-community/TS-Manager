@@ -1,4 +1,4 @@
-import mongoose from 'mongoose'
+Uimport mongoose from 'mongoose'
 
 export interface VerificationEntry {
   guildId: string

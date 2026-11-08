@@ -6,20 +6,44 @@ export interface EconomyBlacklistEntry {
   reason: string
   moderatorId: string
   createdAt: Date
-  /** null = permanente */
   expiresAt: Date | null
 }
 
 const economyBlacklistSchema = new mongoose.Schema<EconomyBlacklistEntry>({
-  guildId: { type: String, required: true },
-  userId: { type: String, required: true },
-  reason: { type: String, required: true },
-  moderatorId: { type: String, required: true },
-  createdAt: { type: Date, default: Date.now },
-  expiresAt: { type: Date, default: null }
+  guildId: {
+    type: String,
+    required: true
+  },
+  userId: {
+    type: String,
+    required: true
+  },
+  reason: {
+    type: String,
+    required: true
+  },
+  moderatorId: {
+    type: String,
+    required: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  expiresAt: {
+    type: Date,
+    default: null
+  }
 })
 
-economyBlacklistSchema.index({ guildId: 1, userId: 1 }, { unique: true })
+economyBlacklistSchema.index(
+  { guildId: 1, userId: 1 },
+  { unique: true }
+)
+
 economyBlacklistSchema.index({ expiresAt: 1 })
 
-export default mongoose.model('EconomyBlacklist', economyBlacklistSchema)
+export default mongoose.model(
+  'EconomyBlacklist',
+  economyBlacklistSchema
+)
