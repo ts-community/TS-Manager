@@ -2,15 +2,17 @@
 // deben copiarse a mano a dist para que Node ESM los resuelva igual que en src/.
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const srcDir = path.join(import.meta.dirname, '..', 'src')
-const distDir = path.join(import.meta.dirname, '..', 'dist')
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const srcDir = path.join(scriptDir, '..', 'src')
+const distDir = path.join(scriptDir, '..', 'dist')
 
 // Carpetas de src que contienen assets a replicar en dist, misma ruta relativa
 const assetDirs = ['src/ml/model']
 
 for (const rel of assetDirs) {
-  const from = path.join(import.meta.dirname, '..', rel)
+  const from = path.join(scriptDir, '..', rel)
   const to = path.join(distDir, path.relative(srcDir, from))
   if (!fs.existsSync(from)) continue
   fs.mkdirSync(to, { recursive: true })

@@ -7,8 +7,10 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const distDir = path.join(import.meta.dirname, '..', 'dist')
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const distDir = path.join(scriptDir, '..', 'dist')
 
 const specifierPattern = /((?:import|export)(?:[^'"]*?\bfrom)?\s*['"])([^'"]+)(['"])/g
 

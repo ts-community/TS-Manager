@@ -7,7 +7,11 @@ module.exports = {
       instances: 1,
       autorestart: true,
       watch: false,
-      max_restarts: 10,
+      max_restarts: 100,
+      min_uptime: '20s',
+      restart_delay: 4000,
+      exp_backoff_restart_delay: 1000,
+      kill_timeout: 5000,
       env: {
         NODE_ENV: 'production'
       }
