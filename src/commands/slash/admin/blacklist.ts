@@ -282,55 +282,40 @@ export default {
         })
       }
 
-      // LISTA
+      // LISTA (sin categoría: las dos, cada una en su embed)
       if (operation === 'lista') {
-        if (!category) {
-          return interaction.editReply({
-            content: 'Debes indicar la categoría que quieres consultar.'
-          })
-        }
+        const types: BlacklistType[] = category ? [category] : ['tournaments', 'economy']
+        const embeds: EmbedBuilder[] = []
 
-        const entries = await getBlacklist(category)
+        for (const type of types) {
+          const entries = await getBlacklist(type)
+          const lines: string[] = []
 
-        if (!entries.length) {
-          return interaction.editReply({
-            content: `La blacklist de ${CATEGORY_NAMES[category]} está vacía.`
-          })
-        }
+          for (const entry of entries) {
+            const blacklistEntry = entry[type]
+            if (!blacklistEntry) continue
 
-        const lines: string[] = []
+            const line = [
+              `**<@${entry.discordId}>**`,
+              `> Motivo: ${blacklistEntry.reason}`,
+              `> Expira: ${formatExpiry(blacklistEntry.expiresAt)}`
+            ].join('\n')
 
-        for (const entry of entries) {
-          const blacklistEntry = entry[category]
-
-          if (!blacklistEntry) continue
-
-          const line = [
-            `**<@${entry.discordId}>**`,
-            `> Motivo: ${blacklistEntry.reason}`,
-            `> Expira: ${formatExpiry(blacklistEntry.expiresAt)}`
-          ].join('\n')
-
-          if (
-            lines.join('\n\n').length + line.length > 4000
-          ) {
-            break
+            if (lines.join('\n\n').length + line.length > 4000) break
+            lines.push(line)
           }
 
-          lines.push(line)
+          const embed = new EmbedBuilder()
+            .setColor('Red')
+            .setTitle(`Blacklist de ${CATEGORY_NAMES[type]}`)
+            .setDescription(lines.length ? lines.join('\n\n') : 'Está vacía.')
+            .setTimestamp()
+          if (lines.length) embed.setFooter({ text: `Mostrando ${lines.length} de ${entries.length} usuarios` })
+          embeds.push(embed)
         }
 
-        const embed = new EmbedBuilder()
-          .setColor('Red')
-          .setTitle(`Blacklist de ${CATEGORY_NAMES[category]}`)
-          .setDescription(lines.join('\n\n'))
-          .setFooter({
-            text: `Mostrando ${lines.length} de ${entries.length} usuarios`
-          })
-          .setTimestamp()
-
         return interaction.editReply({
-          embeds: [embed],
+          embeds,
           allowedMentions: { parse: [] }
         })
       }
