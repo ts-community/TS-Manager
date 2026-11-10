@@ -1,7 +1,7 @@
 import type { SelectMenuHandler } from '../../types/interactions'
 import { isBlacklisted } from '../../services/blacklist'
 import { addTeamMember } from '../../services/team'
-import { buildTeamView } from '../../services/tournaments'
+import { buildTeamView } from '../../servicestournament'
 import { isUserVerified } from '../../services/verification'
 import logger from '../../utils/logger'
 
