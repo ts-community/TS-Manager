@@ -290,8 +290,7 @@ export default {
 
     if (!guild) {
       await interaction.reply({
-        content: 'Este comando solo puede ser usado en servidores.',
-        ephemeral: true
+        content: 'Este comando solo puede ser usado en servidores.'
       })
       return
     }
@@ -306,7 +305,7 @@ export default {
       const withEvent = interaction.options.getBoolean('evento') ?? true
       const durationHours = interaction.options.getInteger('duracion_horas') ?? 2
 
-      await interaction.deferReply({ ephemeral: true })
+      await interaction.deferReply()
 
       try {
         const active = await getActiveTournament()
@@ -344,7 +343,7 @@ export default {
       const hora = interaction.options.getString('hora')
       const maxTeams = interaction.options.getInteger('max_equipos')
 
-      await interaction.deferReply({ ephemeral: true })
+      await interaction.deferReply()
 
       try {
         const tournament = await getActiveTournament()
@@ -407,13 +406,12 @@ export default {
 
       if (!channel || !channel.isSendable()) {
         await interaction.reply({
-          content: 'Indica un canal de texto válido.',
-          ephemeral: true
+          content: 'Indica un canal de texto válido.'
         })
         return
       }
 
-      await interaction.deferReply({ ephemeral: true })
+      await interaction.deferReply()
 
       try {
         const tournament = await getActiveTournament()
@@ -435,7 +433,7 @@ export default {
 
     if (subcommand === 'cancelar') {
       const tournamentName = interaction.options.getString('nombre')
-      await interaction.deferReply({ ephemeral: true })
+      await interaction.deferReply()
 
       try {
         const result = await cancelTournament(guild, tournamentName)
@@ -477,7 +475,7 @@ export default {
     }
 
     if (subcommand === 'lista') {
-      await interaction.deferReply({ ephemeral: true })
+      await interaction.deferReply()
 
       try {
         const includeCancelled = interaction.options.getBoolean('mostrar_cancelados') ?? false
