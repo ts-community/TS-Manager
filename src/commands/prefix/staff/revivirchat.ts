@@ -2,7 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'disc
 import type { PrefixCommand } from '../../../types/commands'
 
 const ROLE_ID = '1173666295556866089'
-const GENERAL_CHANNEL_NAME = 'general'
+const GENERAL_CHANNEL_ID = '1096150563667837011'
 const COOLDOWN_MS = 24 * 60 * 60 * 1000
 
 /** Última vez que se envió el ping del rol en este proceso. */
@@ -14,12 +14,12 @@ export default {
   async execute(message, args) {
     if (!message.inGuild()) return
 
-    if (message.channel.isThread() || message.channel.name.toLowerCase() !== GENERAL_CHANNEL_NAME) {
+    if (message.channelId !== GENERAL_CHANNEL_ID) {
       await message.reply({
         embeds: [
           new EmbedBuilder()
             .setColor('Yellow')
-            .setDescription('Este comando solo se puede usar en el canal #general.')
+            .setDescription(`Este comando solo se puede usar en el canal <#${GENERAL_CHANNEL_ID}>.`)
         ]
       })
       return
