@@ -43,6 +43,7 @@ import { resolveClubEntries, type ResolvedClub } from './clubs'
 import { getGuildConfig, setGuildConfigCache } from './guild'
 import GuildModel from '../models/Guild'
 import Verification from '../models/Verification'
+import User from '../models/User'
 import logger from '../utils/logger'
 
 const PANEL_ACCENT = 0x3B82F6
@@ -190,6 +191,10 @@ export async function publishVerificationPanel(client: Client): Promise<void> {
   await GuildModel.updateOne({ guildId: config.guildId }, { $set: { verificationPanelMessageId: message.id } })
   setGuildConfigCache(config)
   logger.success('Panel de verificación publicado')
+}
+
+export async function isUserVerified(guildId: string, discordId: string): Promise<boolean> {
+  return Boolean(await Verification.exists({ guildId, userId: discordId }))
 }
 
 export async function sendVerificationLog(guild: Guild, embed: EmbedBuilder): Promise<void> {
@@ -453,6 +458,18 @@ export async function verifyMember(
     }
 
     throw error
+  }
+
+  try {
+    await User.findOneAndUpdate(
+      { discordId: member.id },
+      { $set: { brawlId: tag }, $setOnInsert: { teamId: null } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    )
+  } catch (error) {
+    if ((error as { code?: number }).code !== 11000) {
+      logger.warn(`No se pudo sincronizar el tag de ${member.id} en la colección de usuarios: ${(error as Error).message}`)
+    }
   }
 
   const previousTag = existing ? normalizeBrawlTag(existing.tag) : null

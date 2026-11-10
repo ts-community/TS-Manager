@@ -7,7 +7,7 @@ import { publishServiceThreads } from '../../services/services'
 import { schedulePanelsSync } from '../../services/asociaciones'
 import { startTagRoleManager } from '../../services/tagRole'
 
-const RESTART_NOTIFY_CHANNEL_ID = '1235177703045599304'
+const RESTART_NOTIFY_THREAT_ID = '1569786641910857930'
 
 export default {
   once: true,
@@ -16,16 +16,19 @@ export default {
     if (!client.user) return
     logger.success(`Logged in as ${client.user.tag}`)
 
-    try {
-      const channel = await client.channels.fetch(RESTART_NOTIFY_CHANNEL_ID)
-      if (channel?.isSendable()) {
-        await channel.send(`🔄 Bot reiniciado correctamente - <t:${Math.floor(Date.now() / 1000)}:F>`)
-      }
-    } catch (error) {
-      logger.error('No se pudo enviar el aviso de reinicio', {
-        reason: error instanceof Error ? error.message : 'Unknown error'
-      })
+  try {
+    const channel = await client.channels.fetch(RESTART_NOTIFY_THREAT_ID)
+
+    if (channel?.isThread()) {
+      await channel.send(
+        `🔄 Bot reiniciado correctamente - <t:${Math.floor(Date.now() / 1000)}:F>`
+      )
     }
+  } catch (error) {
+    logger.error('No se pudo enviar el aviso de reinicio', {
+      reason: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
 
     try {
       await publishServiceThreads(client)

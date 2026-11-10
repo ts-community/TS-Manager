@@ -18,6 +18,7 @@ import {
   formatExpiry,
   isEntryActive
 } from '@/services/blacklist'
+import { removeUserFromTournamentSystem } from '@/services/tournament'
 
 const CATEGORY_NAMES: Record<BlacklistType, string> = {
   tournaments: 'Torneos',
@@ -68,12 +69,12 @@ export default {
     .addStringOption(option =>
       option
         .setName('operacion')
-        .setDescription('Operación (por defecto: consultar)')
+        .setDescription('Operación (por defecto: lista)')
         .setRequired(false)
         .addChoices(
-          { name: 'Consultar', value: 'consultar' },
           { name: 'Añadir', value: 'añadir' },
           { name: 'Quitar', value: 'quitar' },
+          { name: 'Consultar', value: 'consultar' },
           { name: 'Lista', value: 'lista' }
         )
     )
@@ -124,7 +125,7 @@ export default {
 
       const guild = interaction.guild
       const operation =
-        interaction.options.getString('operacion') ?? 'consultar'
+        interaction.options.getString('operacion') ?? 'lista'
 
       const user = interaction.options.getUser('usuario')
 
@@ -229,6 +230,12 @@ export default {
           reason,
           durationDays
         )
+
+        if (category === 'tournaments') {
+          await removeUserFromTournamentSystem(user.id).catch(error => {
+            console.warn('[BLACKLIST] No se pudo eliminar el equipo del usuario:', error)
+          })
+        }
 
         const entry = blacklist[category]
 
