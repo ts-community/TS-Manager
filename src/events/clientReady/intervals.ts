@@ -14,6 +14,7 @@ import {
   checkDueAsociaciones,
   checkRepresentantesAusentes
 } from '../../services/asociaciones'
+import { scheduleReverify } from '../../services/verification'
 
 const SECOND = 1000
 const MINUTE = 60 * SECOND
@@ -45,5 +46,8 @@ export default {
     runInterval([
       checkRepresentantesAusentes.bind(null, client)
     ], DAY)
+
+    // Re-verifica a todos los usuarios cada 12h (con un retardo inicial).
+    scheduleReverify(client)
   }
 } satisfies Event<'clientReady'>

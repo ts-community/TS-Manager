@@ -1,6 +1,7 @@
-import { ChannelType, EmbedBuilder, type Client } from 'discord.js'
+import { ChannelType, EmbedBuilder, type Client, type Guild, type Role } from 'discord.js'
 import { brawlStarsApiToken, brawlStarsChannelId, brawlStarsMessageId, guildId } from '../config/env'
 import { formatCountry, getCountryFlag, isSupportedCountryCode, normalizeCountryInput } from '../config/countries'
+import { buildClubRoleName } from '../config/verification'
 import { getGuildConfig } from './guild'
 import logger from '../utils/logger'
 
@@ -9,6 +10,8 @@ export interface ResolvedClub {
   countryCode: string
   /** true si el país viene de una entrada explícita, false si es el ES por defecto heredado */
   explicitCountry: boolean
+  /** Rol de Discord asociado al club, si está configurado. */
+  roleId: string | null
 }
 
 export const DEFAULT_CLUB_COUNTRY = 'ES'
@@ -56,11 +59,12 @@ export function resolveClubEntries(rawTags: unknown): ResolvedClub[] {
     let tag: string | null = null
     let country = DEFAULT_CLUB_COUNTRY
     let explicitCountry = false
+    let roleId: string | null = null
 
     if (typeof raw === 'string') {
       tag = normalizeTagWithHash(raw)
     } else if (raw && typeof raw === 'object') {
-      const obj = raw as { tag?: unknown; countryCode?: unknown; country?: unknown; pais?: unknown }
+      const obj = raw as { tag?: unknown; countryCode?: unknown; country?: unknown; pais?: unknown; roleId?: unknown }
       if (typeof obj.tag === 'string' && obj.tag.trim()) {
         tag = normalizeTagWithHash(obj.tag)
       }
@@ -70,14 +74,51 @@ export function resolveClubEntries(rawTags: unknown): ResolvedClub[] {
         country = normalized
         explicitCountry = true
       }
+      if (typeof obj.roleId === 'string' && obj.roleId.trim()) {
+        roleId = obj.roleId.trim()
+      }
     }
 
     if (!tag || seen.has(tag)) continue
     seen.add(tag)
-    entries.push({ tag, countryCode: country, explicitCountry })
+    entries.push({ tag, countryCode: country, explicitCountry, roleId })
   }
 
   return entries
+}
+
+/**
+ * Crea (o reutiliza por nombre) el rol de un club y lo coloca por debajo del
+ * rol de club más bajo ya existente. Devuelve el rol o null si falla.
+ */
+export async function ensureClubRole(
+  guild: Guild,
+  clubName: string,
+  otherClubRoleIds: Array<string | null | undefined> = []
+): Promise<Role | null> {
+  const name = buildClubRoleName(clubName)
+  const existing = guild.roles.cache.find((role) => role.name === name)
+  if (existing) return existing
+
+  try {
+    const role = await guild.roles.create({ name, reason: 'Rol de club de Brawl Stars' })
+
+    const otherPositions = otherClubRoleIds
+      .map((id) => (id ? guild.roles.cache.get(id)?.position : undefined))
+      .filter((position): position is number => typeof position === 'number')
+
+    if (otherPositions.length > 0) {
+      const lowest = Math.min(...otherPositions)
+      await role.setPosition(Math.max(1, lowest - 1)).catch((error: Error) => {
+        logger.warn(`No se pudo posicionar el rol ${name}: ${error.message}`)
+      })
+    }
+
+    return role
+  } catch (error) {
+    logger.warn(`No se pudo crear el rol del club ${clubName}: ${(error as Error).message}`)
+    return null
+  }
 }
 
 const CLUB_EMOJI = '<:Club:1275522702446301338>'

@@ -7,7 +7,15 @@ export interface VerificationEntry {
   tag: string
   playerName: string
   trophies: number
+  victories: number
+  /** Tag del club al que pertenece el jugador, o null si no tiene club. */
+  clubTag: string | null
+  clubName: string | null
+  /** Rango dentro del club: president | vicePresident | senior | member | null */
+  clubRank: string | null
   verifiedAt: Date
+  /** Última vez que se comprobó la cuenta (por el interval). */
+  lastCheckedAt: Date | null
 }
 
 const verificationSchema = new mongoose.Schema<VerificationEntry>({
@@ -16,7 +24,12 @@ const verificationSchema = new mongoose.Schema<VerificationEntry>({
   tag: { type: String, required: true },
   playerName: { type: String, required: true },
   trophies: { type: Number, default: 0 },
-  verifiedAt: { type: Date, default: Date.now }
+  victories: { type: Number, default: 0 },
+  clubTag: { type: String, default: null },
+  clubName: { type: String, default: null },
+  clubRank: { type: String, default: null },
+  verifiedAt: { type: Date, default: Date.now },
+  lastCheckedAt: { type: Date, default: null }
 })
 
 verificationSchema.index({ guildId: 1, userId: 1 })

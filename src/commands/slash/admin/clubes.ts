@@ -6,6 +6,7 @@ import { formatCountry, getCountryName } from '../../../config/countries'
 import {
   countryCodeToFlag,
   DEFAULT_CLUB_COUNTRY,
+  ensureClubRole,
   findLegacyClubTags,
   isValidCountryCode,
   normalizeCountryCode,
@@ -65,7 +66,7 @@ export default {
     .addStringOption(opt =>
       opt
         .setName('accion')
-        .setDescription('Qué hacer: agregar, remover o editar el país')
+        .setDescription('Qué hacer: agregar, remover o editar el país/rol')
         .setRequired(false)
         .addChoices(
           { name: 'agregar', value: 'agregar' },
@@ -92,10 +93,18 @@ export default {
         .setRequired(false)
         .setMinLength(2)
         .setMaxLength(2)
+    )
+    .addRoleOption(opt =>
+      opt
+        .setName('rol')
+        .setDescription('Rol de Discord que representará a este club (para la verificación)')
+        .setRequired(false)
     ),
 
   async execute(interaction) {
-    if (!interaction.guild) {
+    const guild = interaction.guild
+
+    if (!guild) {
       return interaction.reply({
         content: 'Este comando solo puede ser usado en servidores.',
         ephemeral: true
@@ -103,8 +112,8 @@ export default {
     }
 
     const config =
-      await Guild.findOne({ guildId: interaction.guild.id }) ||
-      await Guild.create({ guildId: interaction.guild.id })
+      await Guild.findOne({ guildId: guild.id }) ||
+      await Guild.create({ guildId: guild.id })
 
     // Migración automática: los tags guardados en formato antiguo (string)
     // pasan a { tag, countryCode } con ES por defecto para que cada club
@@ -112,7 +121,7 @@ export default {
     const legacyTags = findLegacyClubTags(config.clubTags)
     if (legacyTags.length > 0) {
       const entries = resolveClubEntries(config.clubTags)
-      config.clubTags = entries.map(e => ({ tag: e.tag, countryCode: e.countryCode }))
+      config.clubTags = entries.map(e => ({ tag: e.tag, countryCode: e.countryCode, roleId: e.roleId }))
       config.markModified('clubTags')
       await config.save()
     }
@@ -139,9 +148,10 @@ export default {
       }
 
       const tags = await Promise.all(
-        entries.map(async ({ tag, countryCode }) => {
+        entries.map(async ({ tag, countryCode, roleId }) => {
           const clubName = await getClubName(tag)
-          return `• ${formatClubDisplay(clubName, tag, countryCode)}`
+          const roleText = roleId ? ` · <@&${roleId}>` : ''
+          return `• ${formatClubDisplay(clubName, tag, countryCode)}${roleText}`
         })
       )
 
@@ -162,6 +172,13 @@ export default {
         lines.push(`Cámbialo con \`/clubes accion:editar tag:<tag> pais:<código>\`. ${PAIS_HINT}`)
       }
 
+      const withoutRole = entries.filter(e => !e.roleId)
+      if (withoutRole.length > 0) {
+        lines.push('')
+        lines.push(`⚠️ ${withoutRole.length} club(es) no tienen rol asignado: ${withoutRole.map(e => `\`${e.tag}\``).join(', ')}`)
+        lines.push('Asígnalo con `/clubes accion:editar tag:<tag> rol:@Rol` o agrega el club de nuevo para que se cree solo.')
+      }
+
       return {
         color: withoutCountry.length > 0 ? 'Yellow' : 'Blue',
         description: lines.join('\n'),
@@ -173,9 +190,10 @@ export default {
     const tagInput = interaction.options.getString('tag', false)
     const nombreInput = interaction.options.getString('nombre', false)
     const paisInput = interaction.options.getString('pais', false)
+    const roleOption = interaction.options.getRole('rol', false)
 
     // Sin parámetros: resumen de todos los clubes con sus propiedades.
-    if (!accion && !tagInput && !nombreInput && !paisInput) {
+    if (!accion && !tagInput && !nombreInput && !paisInput && !roleOption) {
       const resumen = await buildResumen()
       return replyEmbed(resumen.color, resumen.description, resumen.title)
     }
@@ -201,13 +219,22 @@ export default {
         return replyEmbed('Red', `${tag} ya está configurado.`)
       }
 
-      config.clubTags.push({ tag, countryCode })
+      const clubName = await getClubName(tag)
+      const role = clubName
+        ? await ensureClubRole(guild, clubName, entries.map(e => e.roleId))
+        : null
+
+      config.clubTags.push({ tag, countryCode, roleId: role?.id ?? null })
       config.markModified('clubTags')
       await config.save()
 
-      const clubName = await getClubName(tag)
+      const roleNote = role
+        ? ` Se creó el rol ${role}.`
+        : clubName
+          ? ' No se pudo crear el rol del club; asígnalo manualmente con `/clubes accion:editar`.'
+          : ' Añade el rol del club con `/clubes accion:editar`.'
 
-      return replyEmbed('Green', `${formatClubDisplay(clubName, tag, countryCode)} añadido a los clubes.`)
+      return replyEmbed('Green', `${formatClubDisplay(clubName, tag, countryCode)} añadido a los clubes.${roleNote}`)
     }
 
     if (accion === 'remover') {
@@ -228,7 +255,7 @@ export default {
 
       config.clubTags = entries
         .filter(e => e.tag !== tag)
-        .map(e => ({ tag: e.tag, countryCode: e.countryCode }))
+        .map(e => ({ tag: e.tag, countryCode: e.countryCode, roleId: e.roleId }))
       config.markModified('clubTags')
       await config.save()
 
@@ -243,34 +270,42 @@ export default {
         return replyEmbed('Red', `No encontré ningún club configurado con el nombre \`${nombreInput?.trim()}\`. Revisa el resumen con \`/clubes\`.`)
       }
 
-      const faltan: string[] = []
-      if (!tag) faltan.push('`tag` (o `nombre`)')
-      if (!paisInput) faltan.push('`pais`')
-
-      if (faltan.length > 0) {
-        return replyEmbed('Red', `Te falta ${faltan.join(' y ')}. Ejemplo: \`/clubes accion:editar tag:#2ABC123 pais:MX\`. ${PAIS_HINT}`)
+      if (!tag) {
+        return replyEmbed('Red', 'Te falta el club. Indica `tag:#TU_TAG` o `nombre:Nombre del club`. Ejemplo: `/clubes accion:editar tag:#2ABC123 pais:MX`.')
       }
 
-      if (!isValidCountryCode(paisInput)) {
+      if (!paisInput && !roleOption) {
+        return replyEmbed('Red', 'Indica al menos `pais` o `rol`. Ejemplos: `/clubes accion:editar tag:#2ABC123 pais:MX` o `/clubes accion:editar tag:#2ABC123 rol:@Rol`.')
+      }
+
+      if (paisInput && !isValidCountryCode(paisInput)) {
         return replyEmbed('Red', `País no válido. ${PAIS_HINT}`)
       }
 
-      const countryCode = normalizeCountryCode(paisInput)
       const existing = entries.find(e => e.tag === tag)
 
       if (!existing) {
         return replyEmbed('Red', `${tag} no está configurado. Agrégalo primero con \`/clubes accion:agregar tag:${tag}\`.`)
       }
 
+      const countryCode = paisInput ? normalizeCountryCode(paisInput) : existing.countryCode
+      const roleId = roleOption ? roleOption.id : existing.roleId
+
       config.clubTags = entries.map(e =>
-        e.tag === tag ? { tag: e.tag, countryCode } : { tag: e.tag, countryCode: e.countryCode }
+        e.tag === tag
+          ? { tag: e.tag, countryCode, roleId: roleId ?? null }
+          : { tag: e.tag, countryCode: e.countryCode, roleId: e.roleId ?? null }
       )
       config.markModified('clubTags')
       await config.save()
 
-      const clubName = await getClubName(tag!)
+      const clubName = await getClubName(tag)
+      const changes: string[] = []
 
-      return replyEmbed('Green', `${formatClubDisplay(clubName, tag!, countryCode)} actualizado al top local de ${getCountryName(countryCode)}.`)
+      if (paisInput) changes.push(`top local de ${getCountryName(countryCode)}`)
+      if (roleOption) changes.push(`rol ${roleOption}`)
+
+      return replyEmbed('Green', `${formatClubDisplay(clubName, tag, countryCode)} actualizado: ${changes.join(' y ')}.`)
     }
 
     return replyEmbed('Red', 'Acción no válida. Usa `accion:agregar`, `accion:remover` o `accion:editar`. Sin parámetros muestra el resumen de clubes.')

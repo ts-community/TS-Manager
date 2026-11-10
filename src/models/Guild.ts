@@ -8,6 +8,8 @@ export interface PurgeChannelConfig {
 export interface ClubTagEntry {
   tag: string
   countryCode: string
+  /** Rol de Discord asignado a los miembros de este club. */
+  roleId?: string | null
 }
 
 export interface GuildConfig {
