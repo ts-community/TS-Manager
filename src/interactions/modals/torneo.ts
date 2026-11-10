@@ -1,7 +1,7 @@
 import type { ModalHandler } from '../../types/interactions'
 import { isBlacklisted } from '../../services/blacklist'
 import { createTeam, getUserTeam, renameTeam } from '../../services/team'
-import { buildTeamView } from '../../servicestournament'
+import { buildTeamView } from '../../services/tournament'
 import { isUserVerified } from '../../services/verification'
 
 export default {

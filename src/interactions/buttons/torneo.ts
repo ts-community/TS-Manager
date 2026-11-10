@@ -14,7 +14,7 @@ import User from '../../models/User'
 import { isBlacklisted } from '../../services/blacklist'
 import { getUserTeam } from '../../services/team'
 import { getActiveTournament, registerTeam } from '../../services/tournament'
-import { buildTeamView } from '../../servicestournament'
+import { buildTeamView } from '../../services/tournament'
 import { isUserVerified } from '../../services/verification'
 
 function createTeamRow() {
