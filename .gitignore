@@ -33,3 +33,4 @@ Thumbs.db
 # Copias de .env con secretos
 .env.*
 !.env.example
+package-lock.json
