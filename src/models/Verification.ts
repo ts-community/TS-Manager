@@ -13,6 +13,8 @@ export interface VerificationEntry {
   clubName: string | null
   /** Rango dentro del club: president | vicePresident | senior | member | null */
   clubRank: string | null
+  /** Puntos de ranked actuales (Power League), o null si no ha jugado ranked. */
+  rankedPoints: number | null
   verifiedAt: Date
   /** Última vez que se comprobó la cuenta (por el interval). */
   lastCheckedAt: Date | null
@@ -28,6 +30,7 @@ const verificationSchema = new mongoose.Schema<VerificationEntry>({
   clubTag: { type: String, default: null },
   clubName: { type: String, default: null },
   clubRank: { type: String, default: null },
+  rankedPoints: { type: Number, default: null },
   verifiedAt: { type: Date, default: Date.now },
   lastCheckedAt: { type: Date, default: null }
 })

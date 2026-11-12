@@ -12,6 +12,8 @@ export interface BrawlPlayer {
   '3vs3Victories': number
   soloVictories: number
   duoVictories: number
+  /** Puntos de ranked actuales (Power League), puede ser undefined si no ha jugado. */
+  rankedPoints?: number
   club?: {
     tag: string
     name: string

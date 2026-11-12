@@ -283,10 +283,10 @@ export async function buildVerificationSummary(guild: Guild): Promise<{ embed: E
       .setEmoji(EMOJI_WINS3VS3)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId('verification:summary:ranks')
-      .setLabel('Rangos')
-      .setEmoji(EMOJI_PRESIDENT)
-      .setStyle(ButtonStyle.Secondary)
+      .setCustomId('verification:summary:ranked')
+      .setLabel('Rankeds')
+      .setEmoji('⚔️')
+      .setStyle(ButtonStyle.Primary)
   )
 
   return { embed, components: [buttonRow] }
@@ -459,6 +459,7 @@ export async function verifyMember(
           playerName: player.name,
           trophies: player.trophies,
           victories: player['3vs3Victories'] ?? 0,
+          rankedPoints: player.rankedPoints ?? null,
           clubTag,
           clubName: clubTag ? player.club?.name ?? null : null,
           clubRank: rank,
@@ -630,6 +631,7 @@ export async function refreshMemberRoles(interaction: ButtonInteraction): Promis
     entry.playerName = player.name
     entry.trophies = player.trophies
     entry.victories = player['3vs3Victories'] ?? 0
+    entry.rankedPoints = player.rankedPoints ?? null
     entry.clubTag = clubTag
     entry.clubName = clubTag ? player.club?.name ?? null : null
     entry.clubRank = rank
@@ -770,6 +772,7 @@ export async function reverifyAllMembers(client: Client): Promise<void> {
     entry.playerName = player.name
     entry.trophies = player.trophies
     entry.victories = player['3vs3Victories'] ?? 0
+    entry.rankedPoints = player.rankedPoints ?? null
     entry.clubTag = clubTag
     entry.clubName = clubTag ? player.club?.name ?? null : null
     entry.clubRank = rank
