@@ -18,7 +18,16 @@ export async function getOrCreateUser(discordId: string): Promise<UserDocument> 
       $setOnInsert: {
         discordId,
         brawlId: null,
-        teamId: null
+        playerName: null,
+        trophies: null,
+        victories: null,
+        clubTag: null,
+        clubName: null,
+        clubRank: null,
+        rankedPoints: null,
+        teamId: null,
+        verifiedAt: null,
+        lastCheckedAt: null
       }
     },
     {

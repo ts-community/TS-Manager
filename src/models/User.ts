@@ -11,9 +11,45 @@ const userSchema = new mongoose.Schema<UserData>({
     type: String,
     default: null
   },
+  playerName: {
+    type: String,
+    default: null
+  },
+  trophies: {
+    type: Number,
+    default: null
+  },
+  victories: {
+    type: Number,
+    default: null
+  },
+  clubTag: {
+    type: String,
+    default: null
+  },
+  clubName: {
+    type: String,
+    default: null
+  },
+  clubRank: {
+    type: String,
+    default: null
+  },
+  rankedPoints: {
+    type: Number,
+    default: null
+  },
   teamId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Team',
+    default: null
+  },
+  verifiedAt: {
+    type: Date,
+    default: null
+  },
+  lastCheckedAt: {
+    type: Date,
     default: null
   }
 })

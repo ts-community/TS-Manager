@@ -42,8 +42,8 @@ import {
 import { resolveClubEntries, type ResolvedClub } from './clubs'
 import { getGuildConfig, setGuildConfigCache } from './guild'
 import GuildModel from '../models/Guild'
-import Verification from '../models/Verification'
 import User from '../models/User'
+import type { UserDocument } from '../models/User'
 import logger from '../utils/logger'
 
 const PANEL_ACCENT = 0x3B82F6
@@ -201,8 +201,8 @@ export async function publishVerificationPanel(client: Client): Promise<void> {
   logger.success('Panel de verificación publicado')
 }
 
-export async function isUserVerified(guildId: string, discordId: string): Promise<boolean> {
-  return Boolean(await Verification.exists({ guildId, userId: discordId }))
+export async function isUserVerified(_guildId: string, discordId: string): Promise<boolean> {
+  return Boolean(await User.exists({ discordId, brawlId: { $ne: null } }))
 }
 
 export async function sendVerificationLog(guild: Guild, embed: EmbedBuilder): Promise<void> {
@@ -230,7 +230,7 @@ function roleMentions(ids: string[]): string {
 }
 
 export async function buildVerificationSummary(guild: Guild): Promise<{ embed: EmbedBuilder; components: ActionRowBuilder<ButtonBuilder>[] }> {
-  const entries = await Verification.find({ guildId: guild.id }).sort({ trophies: -1 })
+  const entries = await User.find({ brawlId: { $ne: null } }).sort({ trophies: -1 }).lean()
 
   const total = entries.length
   const withClub = entries.filter((entry) => entry.clubTag).length
@@ -387,7 +387,21 @@ export async function unverifyMember(
 ): Promise<{ hadRecord: boolean }> {
   const config = await getGuildConfig(true)
   const clubs = resolveClubEntries(config.clubTags)
-  const entry = await Verification.findOneAndDelete({ guildId: guild.id, userId: member.id })
+  const entry = await User.findOne({ discordId: member.id })
+
+  if (entry) {
+    entry.brawlId = null
+    entry.playerName = null
+    entry.trophies = null
+    entry.victories = null
+    entry.clubTag = null
+    entry.clubName = null
+    entry.clubRank = null
+    entry.rankedPoints = null
+    entry.verifiedAt = null
+    entry.lastCheckedAt = null
+    await entry.save()
+  }
 
   await applyUnverifiedRoles(member, clubs)
 
@@ -397,8 +411,8 @@ export async function unverifyMember(
     .setThumbnail(member.user.displayAvatarURL())
     .addFields({ name: 'Usuario', value: `<@${member.id}> (\`${member.user.tag}\`)` })
 
-  if (entry) {
-    embed.addFields({ name: 'Cuenta', value: `**${entry.playerName}** · \`#${entry.tag}\`` })
+  if (entry && entry.brawlId) {
+    embed.addFields({ name: 'Cuenta', value: `**${entry.playerName}** · \`#${entry.brawlId}\`` })
   }
 
   if (actorId && actorId !== member.id) {
@@ -424,10 +438,10 @@ export async function verifyMember(
     return { ok: false, message: 'Escribe un tag de Brawl Stars válido.' }
   }
 
-  const existing = await Verification.findOne({ guildId: guild.id, userId: member.id })
-  const usedByOther = await Verification.findOne({ guildId: guild.id, tag })
+  const existing = await User.findOne({ discordId: member.id })
+  const usedByOther = await User.findOne({ brawlId: tag })
 
-  if (usedByOther && usedByOther.userId !== member.id) {
+  if (usedByOther && usedByOther.discordId !== member.id) {
     return { ok: false, message: 'Esa cuenta de Brawl Stars ya está vinculada a otro usuario.' }
   }
 
@@ -448,14 +462,15 @@ export async function verifyMember(
   const rank = clubTag ? await getBrawlClubRank(clubTag, tag) : null
   const roles = await syncMemberRoles(member, player, rank, clubs)
 
+  const now = new Date()
+  const isFirstTime = !existing || !existing.brawlId
+
   try {
-    await Verification.findOneAndUpdate(
-      { guildId: guild.id, userId: member.id },
+    await User.findOneAndUpdate(
+      { discordId: member.id },
       {
         $set: {
-          guildId: guild.id,
-          userId: member.id,
-          tag,
+          brawlId: tag,
           playerName: player.name,
           trophies: player.trophies,
           victories: player['3vs3Victories'] ?? 0,
@@ -463,9 +478,10 @@ export async function verifyMember(
           clubTag,
           clubName: clubTag ? player.club?.name ?? null : null,
           clubRank: rank,
-          verifiedAt: new Date(),
-          lastCheckedAt: new Date()
-        }
+          verifiedAt: isFirstTime ? now : existing?.verifiedAt ?? now,
+          lastCheckedAt: now
+        },
+        $setOnInsert: { teamId: null }
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     )
@@ -477,20 +493,8 @@ export async function verifyMember(
     throw error
   }
 
-  try {
-    await User.findOneAndUpdate(
-      { discordId: member.id },
-      { $set: { brawlId: tag }, $setOnInsert: { teamId: null } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    )
-  } catch (error) {
-    if ((error as { code?: number }).code !== 11000) {
-      logger.warn(`No se pudo sincronizar el tag de ${member.id} en la colección de usuarios: ${(error as Error).message}`)
-    }
-  }
-
-  const previousTag = existing ? normalizeBrawlTag(existing.tag) : null
-  const title = !existing
+  const previousTag = existing ? existing.brawlId : null
+  const title = isFirstTime
     ? 'Usuario verificado'
     : previousTag !== tag
       ? 'Tag actualizado'
@@ -613,30 +617,30 @@ export async function refreshMemberRoles(interaction: ButtonInteraction): Promis
     return
   }
 
-  const entry = await Verification.findOne({ guildId: guild.id, userId: member.id })
+  const user = await User.findOne({ discordId: member.id })
 
-  if (!entry) {
+  if (!user || !user.brawlId) {
     await interaction.editReply({ content: 'Todavía no tienes una cuenta vinculada. Pulsa **Verificar** primero.' })
     return
   }
 
   try {
-    const player = await getBrawlPlayer(entry.tag)
+    const player = await getBrawlPlayer(user.brawlId)
     const config = await getGuildConfig(true)
     const clubs = resolveClubEntries(config.clubTags)
     const clubTag = player.club?.tag ? normalizeBrawlTag(player.club.tag) : null
-    const rank = clubTag ? await getBrawlClubRank(clubTag, entry.tag) : null
+    const rank = clubTag ? await getBrawlClubRank(clubTag, user.brawlId) : null
     const roles = await syncMemberRoles(member, player, rank, clubs)
 
-    entry.playerName = player.name
-    entry.trophies = player.trophies
-    entry.victories = player['3vs3Victories'] ?? 0
-    entry.rankedPoints = player.rankedPoints ?? null
-    entry.clubTag = clubTag
-    entry.clubName = clubTag ? player.club?.name ?? null : null
-    entry.clubRank = rank
-    entry.lastCheckedAt = new Date()
-    await entry.save()
+    user.playerName = player.name
+    user.trophies = player.trophies
+    user.victories = player['3vs3Victories'] ?? 0
+    user.rankedPoints = player.rankedPoints ?? null
+    user.clubTag = clubTag
+    user.clubName = clubTag ? player.club?.name ?? null : null
+    user.clubRank = rank
+    user.lastCheckedAt = new Date()
+    await user.save()
 
     if (roles.added.length || roles.removed.length) {
       const embed = new EmbedBuilder()
@@ -663,14 +667,25 @@ export async function refreshMemberRoles(interaction: ButtonInteraction): Promis
       const config = await getGuildConfig(true)
       const clubs = resolveClubEntries(config.clubTags)
       await applyUnverifiedRoles(member, clubs)
-      await Verification.deleteOne({ _id: entry._id })
+      const brawlTag = user.brawlId
+      user.brawlId = null
+      user.playerName = null
+      user.trophies = null
+      user.victories = null
+      user.clubTag = null
+      user.clubName = null
+      user.clubRank = null
+      user.rankedPoints = null
+      user.verifiedAt = null
+      user.lastCheckedAt = null
+      await user.save()
 
       await sendVerificationLog(
         guild,
         new EmbedBuilder()
           .setColor('Orange')
           .setTitle('Cuenta no encontrada')
-          .setDescription(`<@${member.id}> ya no tiene la cuenta \`#${entry.tag}\`. Se le marcó como no verificado.`)
+          .setDescription(`<@${member.id}> ya no tiene la cuenta \`#${brawlTag}\`. Se le marcó como no verificado.`)
           .setTimestamp()
       )
 
@@ -696,7 +711,7 @@ export async function reverifyAllMembers(client: Client): Promise<void> {
   const members = await guild.members.fetch()
   const config = await getGuildConfig(true)
   const clubs = resolveClubEntries(config.clubTags)
-  const entries = await Verification.find({ guildId: guild.id })
+  const users = await User.find({ brawlId: { $ne: null } })
 
   const rankCache = new Map<string, Map<string, BrawlClubRole>>()
   const getRank = async (clubTag: string, playerTag: string): Promise<BrawlClubRole | null> => {
@@ -721,11 +736,21 @@ export async function reverifyAllMembers(client: Client): Promise<void> {
   let unlinked = 0
   let skipped = 0
 
-  for (const entry of entries) {
-    const member = members.get(entry.userId)
+  for (const user of users) {
+    const member = members.get(user.discordId)
 
     if (!member) {
-      await Verification.deleteOne({ _id: entry._id })
+      user.brawlId = null
+      user.playerName = null
+      user.trophies = null
+      user.victories = null
+      user.clubTag = null
+      user.clubName = null
+      user.clubRank = null
+      user.rankedPoints = null
+      user.verifiedAt = null
+      user.lastCheckedAt = null
+      await user.save()
       unlinked += 1
       continue
     }
@@ -733,11 +758,22 @@ export async function reverifyAllMembers(client: Client): Promise<void> {
     let player: BrawlPlayer
 
     try {
-      player = await getBrawlPlayer(entry.tag)
+      player = await getBrawlPlayer(user.brawlId!)
     } catch (error) {
       if (error instanceof BrawlStarsApiError && error.status === 404) {
         await applyUnverifiedRoles(member, clubs)
-        await Verification.deleteOne({ _id: entry._id })
+        const brawlTag = user.brawlId
+        user.brawlId = null
+        user.playerName = null
+        user.trophies = null
+        user.victories = null
+        user.clubTag = null
+        user.clubName = null
+        user.clubRank = null
+        user.rankedPoints = null
+        user.verifiedAt = null
+        user.lastCheckedAt = null
+        await user.save()
         unlinked += 1
 
         await sendVerificationLog(
@@ -745,12 +781,12 @@ export async function reverifyAllMembers(client: Client): Promise<void> {
           new EmbedBuilder()
             .setColor('Orange')
             .setTitle('Cuenta no encontrada (revisión automática)')
-            .setDescription(`<@${entry.userId}> ya no tiene la cuenta \`#${entry.tag}\`. Se le marcó como no verificado.`)
+            .setDescription(`<@${user.discordId}> ya no tiene la cuenta \`#${brawlTag}\`. Se le marcó como no verificado.`)
             .setTimestamp()
         )
       } else {
         skipped += 1
-        logger.warn(`No se pudo re-verificar a ${entry.userId}: ${(error as Error).message}`)
+        logger.warn(`No se pudo re-verificar a ${user.discordId}: ${(error as Error).message}`)
       }
 
       await sleep(API_DELAY_MS)
@@ -758,26 +794,26 @@ export async function reverifyAllMembers(client: Client): Promise<void> {
     }
 
     const clubTag = player.club?.tag ? normalizeBrawlTag(player.club.tag) : null
-    const rank = clubTag ? await getRank(clubTag, entry.tag) : null
+    const rank = clubTag ? await getRank(clubTag, user.brawlId!) : null
 
     try {
       await syncMemberRoles(member, player, rank, clubs)
     } catch (error) {
       skipped += 1
-      logger.warn(`No se pudieron sincronizar los roles de ${entry.userId}: ${(error as Error).message}`)
+      logger.warn(`No se pudieron sincronizar los roles de ${user.discordId}: ${(error as Error).message}`)
       await sleep(API_DELAY_MS)
       continue
     }
 
-    entry.playerName = player.name
-    entry.trophies = player.trophies
-    entry.victories = player['3vs3Victories'] ?? 0
-    entry.rankedPoints = player.rankedPoints ?? null
-    entry.clubTag = clubTag
-    entry.clubName = clubTag ? player.club?.name ?? null : null
-    entry.clubRank = rank
-    entry.lastCheckedAt = new Date()
-    await entry.save()
+    user.playerName = player.name
+    user.trophies = player.trophies
+    user.victories = player['3vs3Victories'] ?? 0
+    user.rankedPoints = player.rankedPoints ?? null
+    user.clubTag = clubTag
+    user.clubName = clubTag ? player.club?.name ?? null : null
+    user.clubRank = rank
+    user.lastCheckedAt = new Date()
+    await user.save()
     updated += 1
     await sleep(API_DELAY_MS)
   }

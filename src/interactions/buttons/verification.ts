@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js'
 import type { ButtonHandler } from '../../types/interactions'
 import { refreshMemberRoles } from '../../services/verification'
-import Verification from '../../models/Verification'
+import User from '../../models/User'
 
 const PANEL_ACCENT = 0x3B82F6
 const PAGE_SIZE = 10
@@ -49,8 +49,8 @@ function buildPaginationButtons(view: string, page: number, totalPages: number) 
   return [new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons)]
 }
 
-async function buildSummaryView(view: string, guildId: string, page: number = 0): Promise<{ embed: EmbedBuilder; hasMore: boolean } | null> {
-  const entries = await Verification.find({ guildId })
+async function buildSummaryView(view: string, _guildId: string, page: number = 0): Promise<{ embed: EmbedBuilder; hasMore: boolean } | null> {
+  const entries = await User.find({ brawlId: { $ne: null } }).lean()
 
   if (view === 'clubs') {
     const clubData = new Map<string, { count: number; ranks: Map<string, number> }>()
@@ -95,7 +95,7 @@ async function buildSummaryView(view: string, guildId: string, page: number = 0)
   }
 
   if (view === 'trophies') {
-    const sorted = entries.sort((a, b) => b.trophies - a.trophies)
+    const sorted = entries.sort((a, b) => (b.trophies ?? 0) - (a.trophies ?? 0))
     const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
     const currentPage = Math.min(page, totalPages - 1)
     const pageEntries = sorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE)
@@ -110,7 +110,7 @@ async function buildSummaryView(view: string, guildId: string, page: number = 0)
     }
 
     const lines = pageEntries.map((entry, i) => {
-      return `${currentPage * PAGE_SIZE + i + 1}. ${entry.playerName} (#${entry.tag}) · ${EMOJI_TROPHIES} **${(entry.trophies ?? 0).toLocaleString('es-ES')}`
+      return `${currentPage * PAGE_SIZE + i + 1}. ${entry.playerName} (#${entry.brawlId}) · ${EMOJI_TROPHIES} **${(entry.trophies ?? 0).toLocaleString('es-ES')}`
     })
 
     return {
@@ -137,7 +137,7 @@ async function buildSummaryView(view: string, guildId: string, page: number = 0)
     }
 
     const lines = pageEntries.map((entry, i) => {
-      return `${currentPage * PAGE_SIZE + i + 1}. ${entry.playerName} (#${entry.tag}) · ${EMOJI_WINS3VS3} **${(entry.victories ?? 0).toLocaleString('es-ES')}`
+      return `${currentPage * PAGE_SIZE + i + 1}. ${entry.playerName} (#${entry.brawlId}) · ${EMOJI_WINS3VS3} **${(entry.victories ?? 0).toLocaleString('es-ES')}`
     })
 
     return {
@@ -165,7 +165,7 @@ async function buildSummaryView(view: string, guildId: string, page: number = 0)
     }
 
     const lines = pageEntries.map((entry, i) => {
-      return `${currentPage * PAGE_SIZE + i + 1}. ${entry.playerName} (#${entry.tag}) · ⚔️ **${(entry.rankedPoints ?? 0).toLocaleString('es-ES')} pts**`
+      return `${currentPage * PAGE_SIZE + i + 1}. ${entry.playerName} (#${entry.brawlId}) · ⚔️ **${(entry.rankedPoints ?? 0).toLocaleString('es-ES')} pts**`
     })
 
     return {
@@ -219,7 +219,7 @@ export default {
 
       const result = await buildSummaryView(view, interaction.guildId ?? '', page)
       if (result) {
-        const entries = await Verification.find({ guildId: interaction.guildId ?? '' })
+        const entries = await User.find({ brawlId: { $ne: null } }).lean()
         let totalPages = 1
         if (view === 'clubs') {
           const clubData = new Map<string, number>()
