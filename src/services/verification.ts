@@ -298,7 +298,7 @@ export async function syncMemberRoles(
   rank: BrawlClubRole | null,
   clubs: ResolvedClub[]
 ): Promise<SyncResult> {
-  const clubTag = player.club ? normalizeBrawlTag(player.club.tag) : null
+  const clubTag = player.club?.tag ? normalizeBrawlTag(player.club.tag) : null
   const club = clubTag ? clubs.find((entry) => normalizeBrawlTag(entry.tag) === clubTag) : undefined
   const clubRoleId = club?.roleId ?? null
   const isRegisteredClub = club !== undefined
@@ -444,7 +444,7 @@ export async function verifyMember(
 
   const config = await getGuildConfig(true)
   const clubs = resolveClubEntries(config.clubTags)
-  const clubTag = player.club ? normalizeBrawlTag(player.club.tag) : null
+  const clubTag = player.club?.tag ? normalizeBrawlTag(player.club.tag) : null
   const rank = clubTag ? await getBrawlClubRank(clubTag, tag) : null
   const roles = await syncMemberRoles(member, player, rank, clubs)
 
@@ -460,7 +460,7 @@ export async function verifyMember(
           trophies: player.trophies,
           victories: player['3vs3Victories'] ?? 0,
           clubTag,
-          clubName: player.club?.name ?? null,
+          clubName: clubTag ? player.club?.name ?? null : null,
           clubRank: rank,
           verifiedAt: new Date(),
           lastCheckedAt: new Date()
@@ -506,7 +506,7 @@ export async function verifyMember(
       { name: 'Victorias 3v3', value: (player['3vs3Victories'] ?? 0).toLocaleString('es-ES'), inline: true }
     )
 
-  if (player.club) embed.addFields({ name: 'Club', value: player.club.name })
+  if (player.club?.name) embed.addFields({ name: 'Club', value: player.club.name })
   if (rank) embed.addFields({ name: 'Rango', value: rankLabel(rank), inline: true })
   if (previousTag && previousTag !== tag) {
     embed.addFields({ name: 'Tag anterior', value: `\`#${previousTag}\``, inline: true })
@@ -544,7 +544,7 @@ export function buildResultEmbed(result: VerificationResult): EmbedBuilder {
   lines.push(`${EMOJI_TROPHIES} **Copas:** ${player.trophies.toLocaleString('es-ES')}`)
   lines.push(`${EMOJI_WINS3VS3} **Victorias 3v3:** ${(player['3vs3Victories'] ?? 0).toLocaleString('es-ES')}`)
 
-  if (player.club) {
+  if (player.club?.name) {
     lines.push(`${EMOJI_CLUB} **Club:** ${player.club.name}`)
     if (result.rank) {
       const rankEmoji = result.rank === 'president' ? EMOJI_PRESIDENT : result.rank === 'vicePresident' ? EMOJI_VICE_PRESIDENT : EMOJI_VETERAN
@@ -623,7 +623,7 @@ export async function refreshMemberRoles(interaction: ButtonInteraction): Promis
     const player = await getBrawlPlayer(entry.tag)
     const config = await getGuildConfig(true)
     const clubs = resolveClubEntries(config.clubTags)
-    const clubTag = player.club ? normalizeBrawlTag(player.club.tag) : null
+    const clubTag = player.club?.tag ? normalizeBrawlTag(player.club.tag) : null
     const rank = clubTag ? await getBrawlClubRank(clubTag, entry.tag) : null
     const roles = await syncMemberRoles(member, player, rank, clubs)
 
@@ -631,7 +631,7 @@ export async function refreshMemberRoles(interaction: ButtonInteraction): Promis
     entry.trophies = player.trophies
     entry.victories = player['3vs3Victories'] ?? 0
     entry.clubTag = clubTag
-    entry.clubName = player.club?.name ?? null
+    entry.clubName = clubTag ? player.club?.name ?? null : null
     entry.clubRank = rank
     entry.lastCheckedAt = new Date()
     await entry.save()
@@ -648,7 +648,7 @@ export async function refreshMemberRoles(interaction: ButtonInteraction): Promis
 
       if (roles.added.length) embed.addFields({ name: 'Roles añadidos', value: roleMentions(roles.added) })
       if (roles.removed.length) embed.addFields({ name: 'Roles quitados', value: roleMentions(roles.removed) })
-      if (player.club) embed.addFields({ name: 'Club', value: player.club.name, inline: true })
+      if (player.club?.name) embed.addFields({ name: 'Club', value: player.club.name, inline: true })
       if (rank) embed.addFields({ name: 'Rango', value: rankLabel(rank), inline: true })
       embed.setTimestamp()
 
@@ -755,7 +755,7 @@ export async function reverifyAllMembers(client: Client): Promise<void> {
       continue
     }
 
-    const clubTag = player.club ? normalizeBrawlTag(player.club.tag) : null
+    const clubTag = player.club?.tag ? normalizeBrawlTag(player.club.tag) : null
     const rank = clubTag ? await getRank(clubTag, entry.tag) : null
 
     try {
@@ -771,7 +771,7 @@ export async function reverifyAllMembers(client: Client): Promise<void> {
     entry.trophies = player.trophies
     entry.victories = player['3vs3Victories'] ?? 0
     entry.clubTag = clubTag
-    entry.clubName = player.club?.name ?? null
+    entry.clubName = clubTag ? player.club?.name ?? null : null
     entry.clubRank = rank
     entry.lastCheckedAt = new Date()
     await entry.save()
