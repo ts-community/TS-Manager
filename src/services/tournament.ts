@@ -18,7 +18,6 @@ import Team, { type TeamDocument } from '@/models/Team'
 import User from '@/models/User'
 import type { TournamentStatus, TournamentTeam } from '@/types/tournament'
 import { isBlacklisted } from '@/services/blacklist'
-import { isUserVerified } from '@/services/verification'
 import logger from '@/utils/logger'
 
 export const MAX_TEAMS_OPTIONS = [8, 12, 16, 24, 32]
@@ -60,6 +59,10 @@ export function buildInscriptionsPanel(
 
   container.addTextDisplayComponents(text('## 🏆 Inscripciones a torneos'))
   container.addSeparatorComponents(separator())
+  container.addTextDisplayComponents(
+    text('Crea tu equipo, invita a tus compañeros y compite contra los mejores. No es necesario verificarse para participar.')
+  )
+  container.addSeparatorComponents(separator())
 
   if (tournament) {
     const timestamp = Math.floor(tournament.startTime.getTime() / 1000)
@@ -75,6 +78,7 @@ export function buildInscriptionsPanel(
     container.addTextDisplayComponents(
       text('-# Crea tu equipo con al menos 3 titulares y pulsa **Inscribirse**.')
     )
+    container.addSeparatorComponents(separator())
   } else {
     container.addTextDisplayComponents(
       text('No hay ningún torneo abierto ahora mismo. Vuelve más tarde.')
@@ -147,10 +151,6 @@ export async function buildTeamView(
     if (!user) {
       alerts.push('⚠️ Uno de los integrantes ya no existe en la base de datos.')
       continue
-    }
-
-    if (!(await isUserVerified(guildId, user.discordId))) {
-      alerts.push(`⚠️ <@${user.discordId}> no está verificado.`)
     }
 
     if (await isBlacklisted(user.discordId, 'tournaments')) {

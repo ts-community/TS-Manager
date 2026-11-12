@@ -4,7 +4,6 @@ import {
   buildResultEmbed,
   buildVerificationSummary,
   publishVerificationPanel,
-  reverifyAllMembers,
   unverifyMember,
   verifyMember
 } from '../../../services/verification'
@@ -22,9 +21,9 @@ export default {
         .addChoices(
           { name: 'resumen', value: 'resumen' },
           { name: 'panel', value: 'panel' },
-          { name: 'revisar', value: 'revisar' },
           { name: 'cambiar-tag', value: 'cambiar-tag' },
-          { name: 'desverificar', value: 'desverificar' }
+          { name: 'desverificar', value: 'desverificar' },
+          { name: 'actualizar-panel', value: 'actualizar-panel' }
         )
     )
     .addUserOption(opt =>
@@ -54,8 +53,8 @@ export default {
       await interaction.deferReply()
 
       try {
-        const embed = await buildVerificationSummary(guild)
-        await interaction.editReply({ embeds: [embed] })
+        const { embed, components } = await buildVerificationSummary(guild)
+        await interaction.editReply({ embeds: [embed], components })
       } catch (error) {
         logger.error('No se pudo generar el resumen de verificación', {
           reason: error instanceof Error ? error.message : 'Unknown error'
@@ -82,16 +81,19 @@ export default {
       return
     }
 
-    if (accion === 'revisar') {
+    if (accion === 'actualizar-panel') {
       await interaction.deferReply({ ephemeral: true })
 
-      void reverifyAllMembers(interaction.client).catch((error: unknown) => {
-        logger.error('Fallo en la re-verificación manual', {
-          reason: error instanceof Error ? error.message : String(error)
+      try {
+        await publishVerificationPanel(interaction.client)
+        await interaction.editReply({ content: 'Panel de verificación publicado/actualizado.' })
+      } catch (error) {
+        logger.error('No se pudo actualizar el panel de verificación', {
+          reason: error instanceof Error ? error.message : 'Unknown error'
         })
-      })
+        await interaction.editReply({ content: 'No se pudo actualizar el panel. Revisa los permisos del bot.' })
+      }
 
-      await interaction.editReply({ content: 'Re-verificación iniciada en segundo plano. Los roles se irán actualizando.' })
       return
     }
 

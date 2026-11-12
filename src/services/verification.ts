@@ -49,6 +49,14 @@ import logger from '../utils/logger'
 const PANEL_ACCENT = 0x3B82F6
 const API_DELAY_MS = 300
 
+// Emojis custom del servidor
+const EMOJI_PRESIDENT = '<:presidente:1467129797992906917>'
+const EMOJI_VICE_PRESIDENT = '<:vice:1467129801281376362>'
+const EMOJI_VETERAN = '<:vete:1467126232326868992>'
+const EMOJI_TROPHIES = '<:copas:1467126361864016025>'
+const EMOJI_WINS3VS3 = '<:wins3vs3:1570519008581787788>'
+const EMOJI_CLUB = '<:club:1467133380905795848>'
+
 interface SyncResult {
   added: string[]
   removed: string[]
@@ -221,7 +229,7 @@ function roleMentions(ids: string[]): string {
   return ids.map((id) => `<@&${id}>`).join(' ')
 }
 
-export async function buildVerificationSummary(guild: Guild): Promise<EmbedBuilder> {
+export async function buildVerificationSummary(guild: Guild): Promise<{ embed: EmbedBuilder; components: ActionRowBuilder<ButtonBuilder>[] }> {
   const entries = await Verification.find({ guildId: guild.id }).sort({ trophies: -1 })
 
   const total = entries.length
@@ -242,42 +250,46 @@ export async function buildVerificationSummary(guild: Guild): Promise<EmbedBuild
   const ranks = [...rankCounts.entries()].sort((a, b) => b[1] - a[1])
   const topPlayers = entries.slice(0, 10)
 
+  // Resumen principal con emojis
+  const summaryLines = [
+    `## 📊 Resumen de verificación`,
+    '',
+    `✅ **${total}** cuenta(s) verificada(s) de **${guild.memberCount}** miembro(s)`,
+    `${EMOJI_CLUB} Con club: **${withClub}** · Sin club: **${withoutClub}**`
+  ]
+  if (lastChecked) {
+    summaryLines.push(`-# Última comprobación: ${lastChecked.toLocaleString('es-ES')}`)
+  }
+
   const embed = new EmbedBuilder()
     .setColor(PANEL_ACCENT)
-    .setTitle('📊 Resumen de verificación')
-    .setDescription([
-      `**${total}** cuenta(s) verificada(s) de **${guild.memberCount}** miembro(s).`,
-      `Con club: **${withClub}** · Sin club: **${withoutClub}**`
-    ].join('\n'))
+    .setDescription(summaryLines.join('\n'))
 
-  if (topClubs.length > 0) {
-    embed.addFields({
-      name: 'Clubes',
-      value: topClubs.map(([name, count]) => `• ${name}: **${count}**`).join('\n')
-    })
-  }
+  // Botones para cambiar entre vistas
+  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('verification:summary:clubs')
+      .setLabel('Clubes')
+      .setEmoji(EMOJI_CLUB)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('verification:summary:trophies')
+      .setLabel('Top Copas')
+      .setEmoji(EMOJI_TROPHIES)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('verification:summary:wins3v3')
+      .setLabel('Top Wins 3v3')
+      .setEmoji(EMOJI_WINS3VS3)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('verification:summary:ranks')
+      .setLabel('Rangos')
+      .setEmoji(EMOJI_PRESIDENT)
+      .setStyle(ButtonStyle.Secondary)
+  )
 
-  if (ranks.length > 0) {
-    embed.addFields({
-      name: 'Rangos',
-      value: ranks.map(([rank, count]) => `• ${rankLabel(rank)}: **${count}**`).join('\n')
-    })
-  }
-
-  if (topPlayers.length > 0) {
-    embed.addFields({
-      name: 'Top copas',
-      value: topPlayers
-        .map((entry, index) => `**${index + 1}.** ${entry.playerName} (\`#${entry.tag}\`) · ${(entry.trophies ?? 0).toLocaleString('es-ES')}`)
-        .join('\n')
-    })
-  }
-
-  if (lastChecked) {
-    embed.setFooter({ text: `Última comprobación: ${lastChecked.toLocaleString('es-ES')}` })
-  }
-
-  return embed
+  return { embed, components: [buttonRow] }
 }
 
 export async function syncMemberRoles(
@@ -289,6 +301,7 @@ export async function syncMemberRoles(
   const clubTag = player.club ? normalizeBrawlTag(player.club.tag) : null
   const club = clubTag ? clubs.find((entry) => normalizeBrawlTag(entry.tag) === clubTag) : undefined
   const clubRoleId = club?.roleId ?? null
+  const isRegisteredClub = club !== undefined
 
   const desired = new Set<string>()
   if (VERIFIED_ROLE_ID) desired.add(VERIFIED_ROLE_ID)
@@ -299,8 +312,11 @@ export async function syncMemberRoles(
   const victoryRole = tierRoleId(VICTORY_ROLES, player['3vs3Victories'] ?? 0)
   if (victoryRole) desired.add(victoryRole)
 
-  const rankRole = rankRoleId(rank)
-  if (rankRole) desired.add(rankRole)
+  // Solo asignar rol de rango si el club está registrado en la base de datos
+  if (isRegisteredClub) {
+    const rankRole = rankRoleId(rank)
+    if (rankRole) desired.add(rankRole)
+  }
 
   if (clubRoleId) desired.add(clubRoleId)
 
@@ -521,16 +537,19 @@ export function buildResultEmbed(result: VerificationResult): EmbedBuilder {
   }
 
   const player = result.player
-  const lines = [
-    `**Jugador:** ${player.name}`,
-    `**Tag:** #${normalizeBrawlTag(player.tag)}`,
-    `**Copas:** ${player.trophies.toLocaleString('es-ES')}`,
-    `**Victorias 3v3:** ${(player['3vs3Victories'] ?? 0).toLocaleString('es-ES')}`
-  ]
+  const lines: string[] = []
+
+  lines.push(`**Jugador:** ${player.name}`)
+  lines.push(`**Tag:** #${normalizeBrawlTag(player.tag)}`)
+  lines.push(`${EMOJI_TROPHIES} **Copas:** ${player.trophies.toLocaleString('es-ES')}`)
+  lines.push(`${EMOJI_WINS3VS3} **Victorias 3v3:** ${(player['3vs3Victories'] ?? 0).toLocaleString('es-ES')}`)
 
   if (player.club) {
-    lines.push(`**Club:** ${player.club.name}`)
-    if (result.rank) lines.push(`**Rango:** ${rankLabel(result.rank)}`)
+    lines.push(`${EMOJI_CLUB} **Club:** ${player.club.name}`)
+    if (result.rank) {
+      const rankEmoji = result.rank === 'president' ? EMOJI_PRESIDENT : result.rank === 'vicePresident' ? EMOJI_VICE_PRESIDENT : EMOJI_VETERAN
+      lines.push(`${rankEmoji} **Rango:** ${rankLabel(result.rank)}`)
+    }
   }
 
   if (result.roles?.added.length) {
