@@ -16,8 +16,20 @@ export interface UserData {
   clubName: string | null
   /** Rango dentro del club: president | vicePresident | senior | member | null */
   clubRank: string | null
-  /** Puntos de ranked actuales (Power League), o null si no ha jugado ranked. */
-  rankedPoints: number | null
+  /** Temporada de ranked actual, o null si no ha jugado ranked. */
+  rankedSeasonId: number | null
+  /** Número del rango actual de ranked. */
+  rankedRank: number | null
+  /** Nombre del rango actual de ranked. */
+  rankedRankName: string | null
+  /** Elo actual de ranked. */
+  rankedElo: number | null
+  /** Mejor elo histórico de ranked. */
+  highestAllTimeRankedElo: number | null
+  /** Mejor número de rango histórico. */
+  highestAllTimeRankedRank: number | null
+  /** Nombre del mejor rango histórico. */
+  highestAllTimeRankedRankName: string | null
   /** Referencia al equipo del usuario en torneos. */
   teamId: mongoose.Types.ObjectId | null
   /** Fecha en que se verificó por primera vez. */

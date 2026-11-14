@@ -367,6 +367,52 @@ export async function removeTeamMember(
   }
 }
 
+export async function leaveTeam(
+  teamId: string,
+  discordId: string
+) {
+  const session = await mongoose.startSession()
+  const result: TeamDocument[] = []
+
+  try {
+    await session.withTransaction(async () => {
+      const team = await Team.findById(teamId).session(session)
+
+      if (!team) throw new Error('No se ha encontrado el equipo.')
+
+      const member = await User.findOne({ discordId }).session(session)
+
+      if (!member) throw new Error('No se ha encontrado al usuario.')
+
+      const memberIndex = team.members.findIndex(
+        item => item.userId.equals(member._id)
+      )
+
+      if (memberIndex === -1) {
+        throw new Error('No perteneces a este equipo.')
+      }
+
+      if (team.members[memberIndex].role === 'leader') {
+        throw new Error('El líder no puede salir del equipo. Disuelve el equipo o transfiere el liderazgo.')
+      }
+
+      team.members.splice(memberIndex, 1)
+      member.teamId = null
+
+      await team.save({ session })
+      await member.save({ session })
+
+      await syncTeamSnapshots(team, session)
+
+      result.push(team)
+    })
+
+    return result[0]
+  } finally {
+    await session.endSession()
+  }
+}
+
 export async function changeMemberRole(
   teamId: string,
   leaderDiscordId: string,

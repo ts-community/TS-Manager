@@ -35,8 +35,32 @@ const userSchema = new mongoose.Schema<UserData>({
     type: String,
     default: null
   },
-  rankedPoints: {
+  rankedSeasonId: {
     type: Number,
+    default: null
+  },
+  rankedRank: {
+    type: Number,
+    default: null
+  },
+  rankedRankName: {
+    type: String,
+    default: null
+  },
+  rankedElo: {
+    type: Number,
+    default: null
+  },
+  highestAllTimeRankedElo: {
+    type: Number,
+    default: null
+  },
+  highestAllTimeRankedRank: {
+    type: Number,
+    default: null
+  },
+  highestAllTimeRankedRankName: {
+    type: String,
     default: null
   },
   teamId: {

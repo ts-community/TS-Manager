@@ -16,76 +16,75 @@ import {
   updateTournament
 } from '@/services/tournament'
 import logger from '@/utils/logger'
+import {
+  formatSpainDate,
+  formatSpainDateTime,
+  getSpainParts,
+  spainDateToUtc
+} from '@/utils/datetime'
 
 const MAX_TEAMS_CHOICES = MAX_TEAMS_OPTIONS.map(value => ({
   name: `${value} equipos`,
   value
 }))
 
+const CURRENT_YEAR = getSpainParts(new Date()).year
+
+const MONTH_CHOICES = [
+  { name: 'Enero', value: 1 },
+  { name: 'Febrero', value: 2 },
+  { name: 'Marzo', value: 3 },
+  { name: 'Abril', value: 4 },
+  { name: 'Mayo', value: 5 },
+  { name: 'Junio', value: 6 },
+  { name: 'Julio', value: 7 },
+  { name: 'Agosto', value: 8 },
+  { name: 'Septiembre', value: 9 },
+  { name: 'Octubre', value: 10 },
+  { name: 'Noviembre', value: 11 },
+  { name: 'Diciembre', value: 12 }
+]
+
+const MINUTE_CHOICES = [0, 15, 30, 45].map(minute => ({
+  name: `:${pad(minute)}`,
+  value: minute
+}))
+
+const HOUR_CHOICES = Array.from({ length: 24 }, (_, hour) => ({
+  name: `${pad(hour)}:00`,
+  value: hour
+}))
+
+const DURATION_CHOICES = [1, 2, 3, 4, 6, 8, 12].map(hours => ({
+  name: `${hours} hora${hours === 1 ? '' : 's'}`,
+  value: hours
+}))
+
 function pad(value: number): string {
   return String(value).padStart(2, '0')
 }
 
-function formatDate(date: Date): string {
-  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`
-}
-
-function formatTime(date: Date): string {
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-function parseDatePart(input: string): { year: number; month: number; day: number } {
-  const trimmed = input.trim()
-  const local = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-
-  if (local) {
-    return {
-      day: Number(local[1]),
-      month: Number(local[2]),
-      year: Number(local[3])
-    }
+function buildStartTime(day: number, month: number, year: number, hours: number, minutes: number): Date {
+  if (![day, month, year, hours, minutes].every(Number.isInteger)) {
+    throw new Error('La fecha y la hora indicadas no son válidas.')
   }
 
-  const iso = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (day < 1 || day > 31) throw new Error('El día debe estar entre 1 y 31.')
+  if (month < 1 || month > 12) throw new Error('El mes debe estar entre 1 y 12.')
+  if (year < CURRENT_YEAR) throw new Error(`El año debe ser ${CURRENT_YEAR} o posterior.`)
+  if (hours < 0 || hours > 23) throw new Error('La hora debe estar entre 0 y 23.')
+  if (minutes < 0 || minutes > 59) throw new Error('Los minutos deben estar entre 0 y 59.')
 
-  if (iso) {
-    return {
-      year: Number(iso[1]),
-      month: Number(iso[2]),
-      day: Number(iso[3])
-    }
-  }
-
-  throw new Error('Fecha inválida. Usa el formato `DD/MM/AAAA`.')
-}
-
-function parseTimePart(input: string): { hours: number; minutes: number } {
-  const match = input.trim().match(/^(\d{1,2}):(\d{2})$/)
-
-  if (!match) {
-    throw new Error('Hora inválida. Usa el formato `HH:MM` en 24 horas.')
-  }
-
-  const hours = Number(match[1])
-  const minutes = Number(match[2])
-
-  if (hours > 23 || minutes > 59) {
-    throw new Error('La hora indicada no es válida.')
-  }
-
-  return { hours, minutes }
-}
-
-function buildStartTime(dateInput: string, timeInput: string): Date {
-  const { year, month, day } = parseDatePart(dateInput)
-  const { hours, minutes } = parseTimePart(timeInput)
-  const startTime = new Date(year, month - 1, day, hours, minutes, 0, 0)
+  const startTime = spainDateToUtc(year, month, day, hours, minutes)
+  const parts = getSpainParts(startTime)
 
   if (
     Number.isNaN(startTime.getTime()) ||
-    startTime.getFullYear() !== year ||
-    startTime.getMonth() !== month - 1 ||
-    startTime.getDate() !== day
+    parts.year !== year ||
+    parts.month !== month ||
+    parts.day !== day ||
+    parts.hour !== hours ||
+    parts.minute !== minutes
   ) {
     throw new Error('La fecha indicada no existe.')
   }
@@ -100,25 +99,25 @@ function tournamentEmbed(
     maxTeams: number
     teams: unknown[]
   },
-  eventId: string | null
+  eventId: string | null,
+  durationHours: number
 ): EmbedBuilder {
   const timestamp = Math.floor(tournament.startTime.getTime() / 1000)
   const embed = new EmbedBuilder()
     .setColor('Green')
     .setTitle('🏆 Torneo creado')
+    .setDescription(`**${tournament.name}**`)
     .addFields(
-      { name: 'Nombre', value: tournament.name },
-      { name: 'Inicio', value: `<t:${timestamp}:F> (<t:${timestamp}:R>)` },
-      { name: 'Equipos', value: `0/${tournament.maxTeams}` }
+      { name: '📅 Inicio', value: `<t:${timestamp}:F>\n<t:${timestamp}:R>`, inline: true },
+      { name: '👥 Equipos', value: `**0/${tournament.maxTeams}**`, inline: true },
+      { name: '⏱️ Duración', value: `**${durationHours} h**`, inline: true },
+      {
+        name: '📣 Evento de Discord',
+        value: eventId ? 'Creado correctamente.' : 'No se ha creado ningún evento.',
+        inline: false
+      }
     )
     .setTimestamp()
-
-  if (eventId) {
-    embed.addFields({
-      name: 'Evento programado',
-      value: 'Creado/actualizado correctamente.'
-    })
-  }
 
   return embed
 }
@@ -147,7 +146,6 @@ function buildTournamentListEmbed(
   }
 
   const lines = tournaments.slice(0, 15).map(tournament => {
-    const timestamp = Math.floor(tournament.startTime.getTime() / 1000)
     const teamCount = tournament.teams.length
     const playerCount = tournament.teams.reduce(
       (total, team) => total + team.members.length,
@@ -162,7 +160,7 @@ function buildTournamentListEmbed(
 
     return [
       `**${tournament.name}** · ${statusLabel(tournament.status)}`,
-      `> <t:${timestamp}:d> · Equipos: **${teamCount}/${tournament.maxTeams}**`,
+      `> ${formatSpainDate(tournament.startTime)} · Equipos: **${teamCount}/${tournament.maxTeams}**`,
       `> Jugadores: **${playerCount}** (${starters} titulares, ${substitutes} suplentes)`
     ].join('\n')
   })
@@ -196,35 +194,61 @@ export default {
             .setRequired(true)
             .setMaxLength(64)
         )
-        .addStringOption(option =>
+        .addIntegerOption(option =>
           option
-            .setName('fecha')
-            .setDescription('Fecha de inicio (DD/MM/AAAA)')
+            .setName('dia')
+            .setDescription('Día del mes (1-31)')
             .setRequired(true)
+            .setMinValue(1)
+            .setMaxValue(31)
         )
-        .addStringOption(option =>
+        .addIntegerOption(option =>
+          option
+            .setName('mes')
+            .setDescription('Mes de inicio')
+            .setRequired(true)
+            .addChoices(...MONTH_CHOICES)
+        )
+        .addIntegerOption(option =>
+          option
+            .setName('ano')
+            .setDescription('Año de inicio')
+            .setRequired(true)
+            .setMinValue(CURRENT_YEAR)
+            .setMaxValue(CURRENT_YEAR + 5)
+        )
+        .addIntegerOption(option =>
           option
             .setName('hora')
-            .setDescription('Hora de inicio (HH:MM, 24h, hora del servidor)')
+            .setDescription('Hora de inicio (24h, España)')
             .setRequired(true)
+            .addChoices(...HOUR_CHOICES)
+        )
+        .addIntegerOption(option =>
+          option
+            .setName('minuto')
+            .setDescription('Minutos de inicio')
+            .setRequired(true)
+            .addChoices(...MINUTE_CHOICES)
         )
         .addIntegerOption(option =>
           option
             .setName('max_equipos')
-            .setDescription('Número máximo de equipos (por defecto 16)')
+            .setDescription('Número máximo de equipos')
+            .setRequired(true)
             .addChoices(...MAX_TEAMS_CHOICES)
+        )
+        .addIntegerOption(option =>
+          option
+            .setName('duracion_horas')
+            .setDescription('Duración del evento')
+            .setRequired(true)
+            .addChoices(...DURATION_CHOICES)
         )
         .addBooleanOption(option =>
           option
             .setName('evento')
             .setDescription('Crear un evento programado en Discord (por defecto sí)')
-        )
-        .addIntegerOption(option =>
-          option
-            .setName('duracion_horas')
-            .setDescription('Duración del evento en horas (por defecto 2)')
-            .setMinValue(1)
-            .setMaxValue(12)
         )
     )
 
@@ -232,21 +256,49 @@ export default {
       subcommand
         .setName('actualizar')
         .setDescription('Actualiza el torneo abierto')
-        .addStringOption(option =>
+        .addIntegerOption(option =>
           option
-            .setName('fecha')
-            .setDescription('Nueva fecha de inicio (DD/MM/AAAA)')
+            .setName('dia')
+            .setDescription('Nuevo día del mes (1-31)')
+            .setMinValue(1)
+            .setMaxValue(31)
         )
-        .addStringOption(option =>
+        .addIntegerOption(option =>
+          option
+            .setName('mes')
+            .setDescription('Nuevo mes de inicio')
+            .addChoices(...MONTH_CHOICES)
+        )
+        .addIntegerOption(option =>
+          option
+            .setName('ano')
+            .setDescription('Nuevo año de inicio')
+            .setMinValue(CURRENT_YEAR)
+            .setMaxValue(CURRENT_YEAR + 5)
+        )
+        .addIntegerOption(option =>
           option
             .setName('hora')
-            .setDescription('Nueva hora de inicio (HH:MM, 24h, hora del servidor)')
+            .setDescription('Nueva hora de inicio (24h, España)')
+            .addChoices(...HOUR_CHOICES)
+        )
+        .addIntegerOption(option =>
+          option
+            .setName('minuto')
+            .setDescription('Nuevos minutos de inicio')
+            .addChoices(...MINUTE_CHOICES)
         )
         .addIntegerOption(option =>
           option
             .setName('max_equipos')
             .setDescription('Nuevo número máximo de equipos')
             .addChoices(...MAX_TEAMS_CHOICES)
+        )
+        .addIntegerOption(option =>
+          option
+            .setName('duracion_horas')
+            .setDescription('Nueva duración del evento')
+            .addChoices(...DURATION_CHOICES)
         )
     )
 
@@ -299,11 +351,14 @@ export default {
 
     if (subcommand === 'crear') {
       const name = interaction.options.getString('nombre', true)
-      const fecha = interaction.options.getString('fecha', true)
-      const hora = interaction.options.getString('hora', true)
-      const maxTeams = interaction.options.getInteger('max_equipos') ?? 16
+      const day = interaction.options.getInteger('dia', true)
+      const month = interaction.options.getInteger('mes', true)
+      const year = interaction.options.getInteger('ano', true)
+      const hours = interaction.options.getInteger('hora', true)
+      const minutes = interaction.options.getInteger('minuto', true)
+      const maxTeams = interaction.options.getInteger('max_equipos', true)
+      const durationHours = interaction.options.getInteger('duracion_horas', true)
       const withEvent = interaction.options.getBoolean('evento') ?? true
-      const durationHours = interaction.options.getInteger('duracion_horas') ?? 2
 
       await interaction.deferReply()
 
@@ -317,14 +372,14 @@ export default {
           return
         }
 
-        const startTime = buildStartTime(fecha, hora)
+        const startTime = buildStartTime(day, month, year, hours, minutes)
         const tournament = await createTournament(name, startTime, maxTeams)
         const eventId = withEvent
           ? await syncTournamentEvent(guild, tournament, durationHours)
           : null
 
         await interaction.editReply({
-          embeds: [tournamentEmbed(tournament, eventId)]
+          embeds: [tournamentEmbed(tournament, eventId, durationHours)]
         })
       } catch (error) {
         logger.error('No se pudo crear el torneo', {
@@ -339,9 +394,13 @@ export default {
     }
 
     if (subcommand === 'actualizar') {
-      const fecha = interaction.options.getString('fecha')
-      const hora = interaction.options.getString('hora')
+      const day = interaction.options.getInteger('dia')
+      const month = interaction.options.getInteger('mes')
+      const year = interaction.options.getInteger('ano')
+      const hours = interaction.options.getInteger('hora')
+      const minutes = interaction.options.getInteger('minuto')
       const maxTeams = interaction.options.getInteger('max_equipos')
+      const durationHours = interaction.options.getInteger('duracion_horas')
 
       await interaction.deferReply()
 
@@ -355,17 +414,43 @@ export default {
           return
         }
 
-        if (!fecha && !hora && maxTeams === null) {
+        const dateParts = [day, month, year]
+        const timeParts = [hours, minutes]
+
+        if (dateParts.some(value => value != null) && dateParts.some(value => value == null)) {
           await interaction.editReply({
-            content: 'Indica al menos una fecha, hora o máximo de equipos.'
+            content: 'Para cambiar la fecha debes indicar **día**, **mes** y **año**.'
           })
           return
         }
 
-        const startTime = fecha || hora
+        if (timeParts.some(value => value != null) && timeParts.some(value => value == null)) {
+          await interaction.editReply({
+            content: 'Para cambiar la hora debes indicar **hora** y **minuto**.'
+          })
+          return
+        }
+
+        if (
+          dateParts.every(value => value == null) &&
+          timeParts.every(value => value == null) &&
+          maxTeams == null &&
+          durationHours == null
+        ) {
+          await interaction.editReply({
+            content: 'Indica al menos un valor para actualizar el torneo.'
+          })
+          return
+        }
+
+        const currentParts = getSpainParts(tournament.startTime)
+        const startTime = dateParts.some(value => value != null) || timeParts.some(value => value != null)
           ? buildStartTime(
-              fecha ?? formatDate(tournament.startTime),
-              hora ?? formatTime(tournament.startTime)
+              day ?? currentParts.day,
+              month ?? currentParts.month,
+              year ?? currentParts.year,
+              hours ?? currentParts.hour,
+              minutes ?? currentParts.minute
             )
           : undefined
 
@@ -374,16 +459,27 @@ export default {
           maxTeams: maxTeams ?? undefined
         })
 
-        await syncTournamentEvent(guild, updated, 2, false)
+        if (startTime || durationHours != null) {
+          await syncTournamentEvent(guild, updated, durationHours ?? undefined, false)
+        }
 
         const timestamp = Math.floor(updated.startTime.getTime() / 1000)
         const embed = new EmbedBuilder()
           .setColor('Blue')
           .setTitle('🔁 Torneo actualizado')
-          .addFields(
-            { name: 'Nombre', value: updated.name },
-            { name: 'Inicio', value: `<t:${timestamp}:F> (<t:${timestamp}:R>)` },
-            { name: 'Equipos', value: `${updated.teams.length}/${updated.maxTeams}` }
+          .setDescription(`**${updated.name}**`)
+.addFields(
+            {
+              name: '📅 Inicio',
+              value: `**${formatSpainDateTime(updated.startTime)}**\n<t:${timestamp}:R>`,
+              inline: true
+            },
+            { name: '👥 Equipos', value: `**${updated.teams.length}/${updated.maxTeams}**`, inline: true },
+            {
+              name: '⏱️ Duración del evento',
+              value: durationHours != null ? `**${durationHours} h**` : '**Sin cambios**',
+              inline: true
+            }
           )
           .setTimestamp()
 
@@ -444,7 +540,11 @@ export default {
           .setTitle('🚫 Torneo cancelado')
           .setDescription(`Se ha cancelado **${result.tournament.name}**.`)
           .addFields(
-            { name: 'Inicio previsto', value: `<t:${timestamp}:F>`, inline: true },
+            {
+              name: 'Inicio previsto',
+              value: `**${formatSpainDateTime(result.tournament.startTime)}**\n<t:${timestamp}:R>`,
+              inline: true
+            },
             {
               name: 'Equipos inscritos',
               value: `${result.tournament.teams.length}/${result.tournament.maxTeams}`,

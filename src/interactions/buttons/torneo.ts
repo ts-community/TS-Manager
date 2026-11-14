@@ -2,7 +2,9 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  LabelBuilder,
   ModalBuilder,
+  StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
   UserSelectMenuBuilder
@@ -12,7 +14,7 @@ import type { ButtonHandler } from '../../types/interactions'
 import Team from '../../models/Team'
 import User from '../../models/User'
 import { isBlacklisted } from '../../services/blacklist'
-import { getUserTeam } from '../../services/team'
+import { deleteTeam, getUserTeam, leaveTeam } from '../../services/team'
 import { getActiveTournament, registerTeam } from '../../services/tournament'
 import { buildTeamView } from '../../services/tournament'
 import { isUserVerified } from '../../services/verification'
@@ -26,6 +28,67 @@ function createTeamRow() {
       .setStyle(ButtonStyle.Primary)
   )
 }
+
+function isValidTeamId(value: string | undefined): value is string {
+  return Boolean(value && /^[a-f0-9]{24}$/i.test(value))
+}
+
+async function requireLeader(teamId: string, discordId: string) {
+  const [team, user] = await Promise.all([
+    Team.findById(teamId),
+    User.findOne({ discordId })
+  ])
+
+  if (!team || !user) throw new Error('No se ha encontrado el equipo.')
+
+  const isLeader = team.members.some(
+    member => member.userId.equals(user._id) && member.role === 'leader'
+  )
+
+  if (!isLeader) throw new Error('Solo el líder puede gestionar el equipo.')
+
+  return team
+}
+
+async function buildMemberSelect(teamId: string, mode: 'remove' | 'role') {
+  const team = await Team.findById(teamId)
+
+  if (!team) throw new Error('No se ha encontrado el equipo.')
+
+  const members = team.members.filter(member => member.role !== 'leader')
+  const users = await User.find({ _id: { $in: members.map(member => member.userId) } })
+  const userMap = new Map(users.map(user => [user._id.toString(), user]))
+
+  const options = members.map(member => {
+    const user = userMap.get(member.userId.toString())
+    const name = user?.playerName ?? user?.discordId ?? 'Usuario'
+    const current = member.role === 'substitute' ? 'Suplente' : 'Titular'
+    const nextRole = member.role === 'substitute' ? 'member' : 'substitute'
+
+    return {
+      label: name,
+      description: `#${user?.brawlId ?? 'sin tag'} · ${current}`,
+      value: mode === 'remove'
+        ? user?.discordId ?? ''
+        : `${user?.discordId ?? ''}|${nextRole}`
+    }
+  }).filter(option => option.value.replace(/\|.*$/, '') !== '')
+
+  if (!options.length) {
+    throw new Error('No hay otros miembros en el equipo.')
+  }
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`torneo:${mode}:${teamId}`)
+    .setPlaceholder(mode === 'remove' ? 'Elige a quién expulsar' : 'Elige a quién cambiar el rol')
+    .setMinValues(1)
+    .setMaxValues(1)
+    .addOptions(options)
+
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)
+}
+
+
 
 export default {
   customId: 'torneo',
@@ -47,7 +110,9 @@ export default {
     }
 
     const [, action, third, fourth] = interaction.customId.split(':')
-    const teamId = action === 'add' ? fourth : third
+    const teamId = action === 'add'
+      ? isValidTeamId(fourth) ? fourth : isValidTeamId(third) ? third : null
+      : isValidTeamId(third) ? third : null
 
     if (action === 'inscribirse') {
       await interaction.deferReply({ ephemeral: true })
@@ -170,16 +235,39 @@ export default {
       const modal = new ModalBuilder()
         .setCustomId('torneo:create-team')
         .setTitle('Crear equipo')
-        .addComponents(
-          new ActionRowBuilder<TextInputBuilder>().addComponents(
-            new TextInputBuilder()
-              .setCustomId('nombre')
-              .setLabel('Nombre del equipo')
-              .setStyle(TextInputStyle.Short)
-              .setMinLength(2)
-              .setMaxLength(32)
-              .setRequired(true)
-          )
+        .addLabelComponents(
+          new LabelBuilder()
+            .setLabel('Nombre del equipo')
+            .setDescription('Entre 2 y 32 caracteres.')
+            .setTextInputComponent(
+              new TextInputBuilder()
+                .setCustomId('nombre')
+                .setStyle(TextInputStyle.Short)
+                .setMinLength(2)
+                .setMaxLength(32)
+                .setRequired(true)
+            ),
+          new LabelBuilder()
+            .setLabel('Titulares')
+            .setDescription('Elige al menos 2 compañeros. Tú ya cuentas como titular.')
+            .setUserSelectMenuComponent(
+              new UserSelectMenuBuilder()
+                .setCustomId('titulares')
+                .setPlaceholder('Selecciona titulares')
+                .setMinValues(2)
+                .setMaxValues(4)
+            ),
+          new LabelBuilder()
+            .setLabel('Suplentes')
+            .setDescription('Opcional, hasta 2 suplentes.')
+            .setUserSelectMenuComponent(
+              new UserSelectMenuBuilder()
+                .setCustomId('suplentes')
+                .setPlaceholder('Selecciona suplentes')
+                .setMinValues(0)
+                .setMaxValues(2)
+                .setRequired(false)
+            )
         )
 
       await interaction.showModal(modal)
@@ -205,7 +293,15 @@ export default {
     }
 
     if (action === 'add') {
-      const role = third === 'suplente' ? 'substitute' : 'member'
+      if (!teamId) {
+        await interaction.reply({
+          content: 'Este botón pertenece a una versión anterior. Vuelve a abrir **Ver Equipo**.',
+          ephemeral: true
+        })
+        return
+      }
+
+      const role = third === 'suplente' || third === 'substitute' ? 'substitute' : 'member'
       const team = await Team.findById(teamId)
       const user = await User.findOne({ discordId: interaction.user.id })
 
@@ -249,7 +345,137 @@ export default {
       return
     }
 
+    if (action === 'remove' || action === 'role') {
+      if (!teamId) {
+        await interaction.reply({
+          content: 'Este botón pertenece a una versión anterior. Vuelve a abrir **Ver Equipo**.',
+          ephemeral: true
+        })
+        return
+      }
+
+      await interaction.deferReply({ ephemeral: true })
+
+      try {
+        await requireLeader(teamId, interaction.user.id)
+
+        const row = await buildMemberSelect(teamId, action)
+
+        await interaction.editReply({
+          content: action === 'remove'
+            ? 'Selecciona al miembro que quieres expulsar:'
+            : 'Selecciona al miembro y el nuevo rol:',
+          components: [row]
+        })
+      } catch (error) {
+        await interaction.editReply({
+          content: `❌ ${error instanceof Error ? error.message : 'No se pudo abrir la gestión de miembros.'}`
+        })
+      }
+
+      return
+    }
+
+    if (action === 'disband') {
+      if (!teamId) {
+        await interaction.reply({
+          content: 'Este botón pertenece a una versión anterior. Vuelve a abrir **Ver Equipo**.',
+          ephemeral: true
+        })
+        return
+      }
+
+      const team = await Team.findById(teamId).catch(() => null)
+
+      if (!team) {
+        await interaction.reply({ content: 'No se ha encontrado el equipo.', ephemeral: true })
+        return
+      }
+
+      await interaction.reply({
+        content: `¿Seguro que quieres disolver **${team.name}**? Esta acción no se puede deshacer.`,
+        components: [
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`torneo:confirm-disband:${team._id}`)
+              .setLabel('Sí, disolver')
+              .setEmoji('💥')
+              .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+              .setCustomId('torneo:cancel')
+              .setLabel('Cancelar')
+              .setStyle(ButtonStyle.Secondary)
+          )
+        ],
+        ephemeral: true
+      })
+      return
+    }
+
+    if (action === 'confirm-disband') {
+      if (!teamId) {
+        await interaction.reply({
+          content: 'Este botón pertenece a una versión anterior. Vuelve a abrir **Ver Equipo**.',
+          ephemeral: true
+        })
+        return
+      }
+
+      await interaction.deferUpdate()
+
+      try {
+        await deleteTeam(teamId, interaction.user.id)
+        await interaction.editReply({
+          content: '💥 El equipo se ha disuelto correctamente.',
+          components: []
+        })
+      } catch (error) {
+        await interaction.editReply({
+          content: `❌ ${error instanceof Error ? error.message : 'No se pudo disolver el equipo.'}`,
+          components: []
+        })
+      }
+
+      return
+    }
+
+    if (action === 'cancel') {
+      await interaction.update({ content: 'Operación cancelada.', components: [] })
+      return
+    }
+
+    if (action === 'leave') {
+      if (!teamId) {
+        await interaction.reply({
+          content: 'Este botón pertenece a una versión anterior. Vuelve a abrir **Ver Equipo**.',
+          ephemeral: true
+        })
+        return
+      }
+
+      await interaction.deferReply({ ephemeral: true })
+
+      try {
+        await leaveTeam(teamId, interaction.user.id)
+        await interaction.editReply({ content: '🚪 Has salido del equipo.' })
+      } catch (error) {
+        await interaction.editReply({
+          content: `❌ ${error instanceof Error ? error.message : 'No se pudo salir del equipo.'}`
+        })
+      }
+
+      return
+    }
+
     if (action === 'rename') {
+      if (!teamId) {
+        await interaction.reply({
+          content: 'Este botón pertenece a una versión anterior. Vuelve a abrir **Ver Equipo**.',
+          ephemeral: true
+        })
+        return
+      }
+
       const team = await Team.findById(teamId)
       const user = await User.findOne({ discordId: interaction.user.id })
 

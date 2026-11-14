@@ -19,6 +19,7 @@ import User from '@/models/User'
 import type { TournamentStatus, TournamentTeam } from '@/types/tournament'
 import { isBlacklisted } from '@/services/blacklist'
 import logger from '@/utils/logger'
+import { formatSpainDateTime } from '@/utils/datetime'
 
 export const MAX_TEAMS_OPTIONS = [8, 12, 16, 24, 32]
 
@@ -60,7 +61,10 @@ export function buildInscriptionsPanel(
   container.addTextDisplayComponents(text('## 🏆 Inscripciones a torneos'))
   container.addSeparatorComponents(separator())
   container.addTextDisplayComponents(
-    text('Crea tu equipo, invita a tus compañeros y compite contra los mejores. No es necesario verificarse para participar.')
+    text([
+      'Crea tu equipo, invita a tus compañeros y compite contra los mejores.',
+      '-# Para crear un equipo e inscribirlo, todos los integrantes deben tener su cuenta de Brawl Stars verificada.'
+    ].join('\n'))
   )
   container.addSeparatorComponents(separator())
 
@@ -70,7 +74,7 @@ export function buildInscriptionsPanel(
     container.addTextDisplayComponents(
       text([
         `### ${tournament.name}`,
-        `📅 Inicio: <t:${timestamp}:F> (<t:${timestamp}:R>)`,
+        `📅 Inicio: **${formatSpainDateTime(tournament.startTime)}** (<t:${timestamp}:R>)`,
         `👥 Equipos: **${tournament.teams.length}/${tournament.maxTeams}**`
       ].join('\n'))
     )
@@ -132,11 +136,17 @@ export async function buildTeamView(
   const activeMembers = team.members.filter(
     member => member.role !== 'substitute'
   ).length
+  const substituteCount = team.members.length - activeMembers
+  const activeTournament = await getActiveTournament()
+  const isRegistered = Boolean(
+    activeTournament?.teams.some(entry => entry.teamId.equals(team._id))
+  )
 
   const memberLines = team.members.map(member => {
     const user = userMap.get(member.userId.toString())
     const mention = user ? `<@${user.discordId}>` : 'Usuario desconocido'
-    return `${TEAM_ROLE_EMOJI[member.role]} ${mention} · ${ROLE_LABEL[member.role]}`
+    const tag = user?.brawlId ? ` · \`#${user.brawlId}\`` : ''
+    return `${TEAM_ROLE_EMOJI[member.role]} ${mention} · ${ROLE_LABEL[member.role]}${tag}`
   })
 
   const alerts: string[] = []
@@ -161,11 +171,22 @@ export async function buildTeamView(
   const container = new ContainerBuilder().setAccentColor(TEAM_COLOR)
 
   container.addTextDisplayComponents(
-    text(`## 🛡️ ${team.name} — ${team.members.length}/5 miembros`)
+    text([
+      `## 🛡️ ${team.name}`,
+      `-# ${team.members.length}/5 miembros · ${activeMembers}/3 titulares · ${substituteCount}/2 suplentes`,
+      activeTournament
+        ? isRegistered
+          ? `-# ✅ Inscrito en **${activeTournament.name}**`
+          : `-# 📝 Aún no inscrito en **${activeTournament.name}**`
+        : '-# No hay ningún torneo abierto ahora mismo.'
+    ].join('\n'))
   )
   container.addSeparatorComponents(separator())
   container.addTextDisplayComponents(
-    text(memberLines.length ? memberLines.join('\n') : 'El equipo no tiene integrantes.')
+    text([
+      '**Integrantes**',
+      memberLines.length ? memberLines.join('\n') : '-# El equipo no tiene integrantes.'
+    ].join('\n'))
   )
   container.addSeparatorComponents(separator())
 
@@ -177,6 +198,31 @@ export async function buildTeamView(
   }
 
   if (isLeader) {
+    const managementButtons: ButtonBuilder[] = []
+
+    if (team.members.length > 1) {
+      managementButtons.push(
+        new ButtonBuilder()
+          .setCustomId(`torneo:remove:${team._id}`)
+          .setLabel('Expulsar miembro')
+          .setEmoji('🗑️')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`torneo:role:${team._id}`)
+          .setLabel('Cambiar rol')
+          .setEmoji('🔁')
+          .setStyle(ButtonStyle.Secondary)
+      )
+    }
+
+    managementButtons.push(
+      new ButtonBuilder()
+        .setCustomId(`torneo:disband:${team._id}`)
+        .setLabel('Disolver equipo')
+        .setEmoji('💥')
+        .setStyle(ButtonStyle.Danger)
+    )
+
     container.addActionRowComponents(
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
@@ -196,9 +242,21 @@ export async function buildTeamView(
           .setStyle(ButtonStyle.Secondary)
       )
     )
+    container.addActionRowComponents(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(...managementButtons)
+    )
   } else {
+    container.addActionRowComponents(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`torneo:leave:${team._id}`)
+          .setLabel('Salir del equipo')
+          .setEmoji('🚪')
+          .setStyle(ButtonStyle.Danger)
+      )
+    )
     container.addTextDisplayComponents(
-      text('-# Solo el líder puede añadir miembros o cambiar el nombre.')
+      text('-# Solo el líder puede añadir, expulsar o cambiar roles.')
     )
   }
 
@@ -518,25 +576,33 @@ export async function updateTournament(
 export async function syncTournamentEvent(
   guild: Guild,
   tournament: TournamentDocument,
-  durationHours = 2,
+  durationHours?: number,
   createIfMissing = true
 ): Promise<string | null> {
   if (tournament.startTime.getTime() <= Date.now()) return null
 
   const name = `Torneo: ${tournament.name}`.slice(0, 100)
-  const scheduledEndTime = new Date(
-    tournament.startTime.getTime() + durationHours * 60 * 60 * 1000
-  )
+  const defaultDurationMs = 2 * 60 * 60 * 1000
+  const durationMs = durationHours != null ? durationHours * 60 * 60 * 1000 : defaultDurationMs
 
   try {
     await guild.scheduledEvents.fetch()
     const existing = guild.scheduledEvents.cache.find(event => event.name === name)
 
     if (existing) {
+      const currentDuration = existing.scheduledStartAt && existing.scheduledEndAt
+        ? existing.scheduledEndAt.getTime() - existing.scheduledStartAt.getTime()
+        : 0
+      const effectiveDuration = durationHours != null
+        ? durationMs
+        : currentDuration > 0
+          ? currentDuration
+          : defaultDurationMs
+
       await existing.edit({
         name,
         scheduledStartTime: tournament.startTime,
-        scheduledEndTime
+        scheduledEndTime: new Date(tournament.startTime.getTime() + effectiveDuration)
       })
       return existing.id
     }
@@ -546,7 +612,7 @@ export async function syncTournamentEvent(
     const event = await guild.scheduledEvents.create({
       name,
       scheduledStartTime: tournament.startTime,
-      scheduledEndTime,
+      scheduledEndTime: new Date(tournament.startTime.getTime() + durationMs),
       privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
       entityType: GuildScheduledEventEntityType.External,
       entityMetadata: { location: 'Discord' },

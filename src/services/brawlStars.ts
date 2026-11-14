@@ -12,8 +12,22 @@ export interface BrawlPlayer {
   '3vs3Victories': number
   soloVictories: number
   duoVictories: number
-  /** Puntos de ranked actuales (Power League), puede ser undefined si no ha jugado. */
-  rankedPoints?: number
+  /** Identificador de la temporada de ranked actual. */
+  rankedSeasonId?: number
+  /** Número del rango actual (1-22). */
+  rankedRank?: number
+  /** Nombre del rango actual (Bronce, Plata, Diamante, Mítico, Maestros...). */
+  rankedRankName?: string
+  /** Elo actual de ranked. */
+  rankedElo?: number
+  /** Mejor elo de la temporada actual. */
+  highestSeasonRankedElo?: number
+  /** Mejor número de rango histórico (1-22). */
+  highestAllTimeRankedRank?: number
+  /** Nombre del mejor rango histórico. */
+  highestAllTimeRankedRankName?: string
+  /** Mejor elo histórico. */
+  highestAllTimeRankedElo?: number
   club?: {
     tag: string
     name: string

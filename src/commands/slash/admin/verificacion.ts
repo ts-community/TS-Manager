@@ -1,7 +1,8 @@
 import { SlashCommandBuilder } from 'discord.js'
 import type { SlashCommand } from '../../../types/commands'
 import {
-  buildResultEmbed,
+  buildVerificationMessage,
+  buildVerificationResultMessage,
   buildVerificationSummary,
   publishVerificationPanel,
   unverifyMember,
@@ -9,10 +10,12 @@ import {
 } from '../../../services/verification'
 import logger from '../../../utils/logger'
 
+const ACCENT = 0x3b82f6
+
 export default {
   data: new SlashCommandBuilder()
     .setName('verificacion')
-    .setDescription('Resumen, publicar panel, re-verificar, cambiar tag o desverificar')
+    .setDescription('Resumen, publicar panel, cambiar tag o desverificar')
     .addStringOption(opt =>
       opt
         .setName('accion')
@@ -20,10 +23,9 @@ export default {
         .setRequired(false)
         .addChoices(
           { name: 'resumen', value: 'resumen' },
-          { name: 'panel', value: 'panel' },
+          { name: 'publicar-panel', value: 'publicar-panel' },
           { name: 'cambiar-tag', value: 'cambiar-tag' },
-          { name: 'desverificar', value: 'desverificar' },
-          { name: 'actualizar-panel', value: 'actualizar-panel' }
+          { name: 'desverificar', value: 'desverificar' }
         )
     )
     .addUserOption(opt =>
@@ -53,45 +55,47 @@ export default {
       await interaction.deferReply()
 
       try {
-        const { embed, components } = await buildVerificationSummary(guild)
-        await interaction.editReply({ embeds: [embed], components })
+        const payload = await buildVerificationSummary(guild)
+        await interaction.editReply(payload)
       } catch (error) {
         logger.error('No se pudo generar el resumen de verificación', {
           reason: error instanceof Error ? error.message : 'Unknown error'
         })
-        await interaction.editReply({ content: 'No se pudo generar el resumen de verificación.' })
+        await interaction.editReply(
+          buildVerificationMessage({
+            title: '❌ Error',
+            description: 'No se pudo generar el resumen de verificación.',
+            accent: 0xef4444
+          })
+        )
       }
 
       return
     }
 
-    if (accion === 'panel') {
+    if (accion === 'publicar-panel') {
       await interaction.deferReply({ ephemeral: true })
 
       try {
         await publishVerificationPanel(interaction.client)
-        await interaction.editReply({ content: 'Panel de verificación publicado/actualizado.' })
+        await interaction.editReply(
+          buildVerificationMessage({
+            title: '✅ Panel publicado',
+            description: 'El panel de verificación se ha **creado o actualizado** correctamente.',
+            accent: 0x22c55e
+          })
+        )
       } catch (error) {
         logger.error('No se pudo publicar el panel de verificación', {
           reason: error instanceof Error ? error.message : 'Unknown error'
         })
-        await interaction.editReply({ content: 'No se pudo publicar el panel. Revisa los permisos del bot.' })
-      }
-
-      return
-    }
-
-    if (accion === 'actualizar-panel') {
-      await interaction.deferReply({ ephemeral: true })
-
-      try {
-        await publishVerificationPanel(interaction.client)
-        await interaction.editReply({ content: 'Panel de verificación publicado/actualizado.' })
-      } catch (error) {
-        logger.error('No se pudo actualizar el panel de verificación', {
-          reason: error instanceof Error ? error.message : 'Unknown error'
-        })
-        await interaction.editReply({ content: 'No se pudo actualizar el panel. Revisa los permisos del bot.' })
+        await interaction.editReply(
+          buildVerificationMessage({
+            title: '❌ No se pudo publicar el panel',
+            description: error instanceof Error ? error.message : 'Revisa los permisos del bot.',
+            accent: 0xef4444
+          })
+        )
       }
 
       return
@@ -124,19 +128,36 @@ export default {
         const result = await verifyMember(guild, member, tag, interaction.user.id)
 
         if (!result.ok) {
-          await interaction.editReply({ content: result.message })
+          await interaction.editReply(
+            buildVerificationMessage({
+              title: '❌ No se pudo verificar',
+              description: result.message,
+              accent: 0xef4444
+            })
+          )
           return
         }
 
-        await interaction.editReply({ embeds: [buildResultEmbed(result)] })
+        await interaction.editReply(buildVerificationResultMessage(result))
       } catch (error) {
         logger.error('No se pudo cambiar el tag de un miembro', {
           user: member.id,
           reason: error instanceof Error ? error.message : 'Unknown error'
         })
-        await interaction.editReply({ content: 'No se pudo cambiar el tag. Inténtalo de nuevo.' })
+        await interaction.editReply(
+          buildVerificationMessage({
+            title: '❌ Error',
+            description: 'No se pudo cambiar el tag. Inténtalo de nuevo.',
+            accent: 0xef4444
+          })
+        )
       }
 
+      return
+    }
+
+    if (accion !== 'desverificar') {
+      await interaction.reply({ content: 'Acción no reconocida.', ephemeral: true })
       return
     }
 
@@ -157,18 +178,44 @@ export default {
     await interaction.deferReply({ ephemeral: true })
 
     try {
-      const { hadRecord } = await unverifyMember(guild, member, interaction.user.id)
-      const prefix = hadRecord
-        ? `Se eliminó la cuenta vinculada de ${member} y`
-        : `${member} no tenía ninguna cuenta vinculada y`
+      const { hadRecord, previousTag, previousName } = await unverifyMember(guild, member, interaction.user.id)
+      const details = [
+        `**👤 Usuario:** <@${member.id}>`,
+        `**🏷️ Estado:** Se le aplicó el rol de **no verificado**.`
+      ]
 
-      await interaction.editReply({ content: `${prefix} se le aplicó el rol de no verificado.` })
+      if (previousTag) {
+        details.push(
+          `**🎮 Cuenta desvinculada:** **${previousName ?? 'Desconocido'}** \`#${previousTag}\``
+        )
+      }
+
+      if (interaction.user.id !== member.id) {
+        details.push(`**🛡️ Acción por:** <@${interaction.user.id}>`)
+      }
+
+      await interaction.editReply(
+        buildVerificationMessage({
+          title: '🔓 Usuario desverificado',
+          description: hadRecord
+            ? 'Su cuenta de Brawl Stars ya no está vinculada y sus roles se han retirado.'
+            : 'No tenía una cuenta vinculada, pero se le aplicó el estado de no verificado.',
+          details,
+          accent: hadRecord ? 0xf59e0b : ACCENT
+        })
+      )
     } catch (error) {
       logger.error('No se pudo desverificar a un miembro', {
         user: member.id,
         reason: error instanceof Error ? error.message : 'Unknown error'
       })
-      await interaction.editReply({ content: 'No se pudo desverificar al miembro. Revisa los permisos del bot.' })
+      await interaction.editReply(
+        buildVerificationMessage({
+          title: '❌ Error',
+          description: 'No se pudo desverificar al miembro. Revisa los permisos del bot.',
+          accent: 0xef4444
+        })
+      )
     }
   }
 } satisfies SlashCommand
