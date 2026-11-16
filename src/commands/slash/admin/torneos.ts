@@ -1,13 +1,15 @@
 import {
   ChannelType,
   EmbedBuilder,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  type TextChannel
 } from 'discord.js'
 
 import type { SlashCommand } from '../../../types/commands'
+import type { TournamentMode } from '@/types/tournament'
 import {
+  MAX_PLAYERS_OPTIONS,
   MAX_TEAMS_OPTIONS,
-  buildInscriptionsPanel,
   cancelTournament,
   createTournament,
   getActiveTournament,
@@ -15,6 +17,12 @@ import {
   syncTournamentEvent,
   updateTournament
 } from '@/services/tournament'
+import {
+  configureTournamentPanel,
+  scheduleTournamentPanelSync,
+  syncInscriptionPanel,
+  syncTournamentPanel
+} from '@/services/tournamentPanel'
 import logger from '@/utils/logger'
 import {
   formatSpainDate,
@@ -27,6 +35,46 @@ const MAX_TEAMS_CHOICES = MAX_TEAMS_OPTIONS.map(value => ({
   name: `${value} equipos`,
   value
 }))
+
+const MAX_PLAYERS_CHOICES = MAX_PLAYERS_OPTIONS.map(value => ({
+  name: `${value} jugadores`,
+  value
+}))
+
+const MODE_CHOICES = [
+  { name: 'Por equipos (por defecto)', value: 'teams' },
+  { name: 'Individual (jugadores)', value: 'solo' }
+]
+
+function resolveTournamentMode(value: string | null): TournamentMode {
+  if (value == null || value === 'teams') return 'teams'
+  if (value === 'solo') return 'solo'
+  throw new Error('La modalidad del torneo no es válida.')
+}
+
+function resolveTournamentLimit(
+  mode: TournamentMode,
+  maxTeams: number | null,
+  maxPlayers: number | null
+): number {
+  if (mode === 'teams') {
+    if (maxPlayers != null) {
+      throw new Error('El máximo de jugadores solo se usa en torneos individuales.')
+    }
+    if (maxTeams == null) {
+      throw new Error('Indica el máximo de equipos para un torneo por equipos.')
+    }
+    return maxTeams
+  }
+
+  if (maxTeams != null) {
+    throw new Error('El máximo de equipos solo se usa en torneos por equipos.')
+  }
+  if (maxPlayers == null) {
+    throw new Error('Indica el máximo de jugadores para un torneo individual.')
+  }
+  return maxPlayers
+}
 
 const CURRENT_YEAR = getSpainParts(new Date()).year
 
@@ -96,20 +144,35 @@ function tournamentEmbed(
   tournament: {
     name: string
     startTime: Date
+    mode: TournamentMode
     maxTeams: number
+    maxPlayers: number
     teams: unknown[]
+    players: unknown[]
   },
   eventId: string | null,
   durationHours: number
 ): EmbedBuilder {
   const timestamp = Math.floor(tournament.startTime.getTime() / 1000)
+  const isSolo = tournament.mode === 'solo'
   const embed = new EmbedBuilder()
     .setColor('Green')
     .setTitle('🏆 Torneo creado')
     .setDescription(`**${tournament.name}**`)
     .addFields(
+      {
+        name: '🎮 Modalidad',
+        value: isSolo ? '**Individual**' : '**Por equipos**',
+        inline: true
+      },
       { name: '📅 Inicio', value: `<t:${timestamp}:F>\n<t:${timestamp}:R>`, inline: true },
-      { name: '👥 Equipos', value: `**0/${tournament.maxTeams}**`, inline: true },
+      {
+        name: isSolo ? '👤 Jugadores' : '👥 Equipos',
+        value: isSolo
+          ? `**${tournament.players.length}/${tournament.maxPlayers}**`
+          : `**${tournament.teams.length}/${tournament.maxTeams}**`,
+        inline: true
+      },
       { name: '⏱️ Duración', value: `**${durationHours} h**`, inline: true },
       {
         name: '📣 Evento de Discord',
@@ -146,6 +209,14 @@ function buildTournamentListEmbed(
   }
 
   const lines = tournaments.slice(0, 15).map(tournament => {
+    if (tournament.mode === 'solo') {
+      return [
+        `**${tournament.name}** · ${statusLabel(tournament.status)}`,
+        `> ${formatSpainDate(tournament.startTime)} · Jugadores: **${tournament.players.length}/${tournament.maxPlayers}**`,
+        '> Inscripción individual'
+      ].join('\n')
+    }
+
     const teamCount = tournament.teams.length
     const playerCount = tournament.teams.reduce(
       (total, team) => total + team.members.length,
@@ -231,12 +302,23 @@ export default {
             .setRequired(true)
             .addChoices(...MINUTE_CHOICES)
         )
+        .addStringOption(option =>
+          option
+            .setName('modalidad')
+            .setDescription('Formato del torneo (por defecto, por equipos)')
+            .addChoices(...MODE_CHOICES)
+        )
         .addIntegerOption(option =>
           option
             .setName('max_equipos')
-            .setDescription('Número máximo de equipos')
-            .setRequired(true)
+            .setDescription('Número máximo de equipos (solo modalidad por equipos)')
             .addChoices(...MAX_TEAMS_CHOICES)
+        )
+        .addIntegerOption(option =>
+          option
+            .setName('max_jugadores')
+            .setDescription('Número máximo de jugadores (solo modalidad individual)')
+            .addChoices(...MAX_PLAYERS_CHOICES)
         )
         .addIntegerOption(option =>
           option
@@ -291,8 +373,14 @@ export default {
         .addIntegerOption(option =>
           option
             .setName('max_equipos')
-            .setDescription('Nuevo número máximo de equipos')
+            .setDescription('Nuevo máximo de equipos (solo torneos por equipos)')
             .addChoices(...MAX_TEAMS_CHOICES)
+        )
+        .addIntegerOption(option =>
+          option
+            .setName('max_jugadores')
+            .setDescription('Nuevo máximo de jugadores (solo torneos individuales)')
+            .addChoices(...MAX_PLAYERS_CHOICES)
         )
         .addIntegerOption(option =>
           option
@@ -304,13 +392,24 @@ export default {
 
     .addSubcommand(subcommand =>
       subcommand
-        .setName('panel')
-        .setDescription('Publica el panel de inscripciones')
+        .setName('configurar')
+        .setDescription('Configura los canales y paneles de torneos')
         .addChannelOption(option =>
           option
-            .setName('canal')
-            .setDescription('Canal donde publicar el panel (por defecto el actual)')
+            .setName('canal_inscripciones')
+            .setDescription('Canal del panel de inscripciones con botones')
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+        )
+        .addChannelOption(option =>
+          option
+            .setName('canal_inscritos')
+            .setDescription('Canal donde se muestra el torneo activo y sus inscritos')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+        )
+        .addBooleanOption(option =>
+          option
+            .setName('actualizar')
+            .setDescription('Actualiza ahora los paneles ya configurados')
         )
     )
 
@@ -356,13 +455,16 @@ export default {
       const year = interaction.options.getInteger('ano', true)
       const hours = interaction.options.getInteger('hora', true)
       const minutes = interaction.options.getInteger('minuto', true)
-      const maxTeams = interaction.options.getInteger('max_equipos', true)
+      const mode = resolveTournamentMode(interaction.options.getString('modalidad'))
+      const maxTeams = interaction.options.getInteger('max_equipos')
+      const maxPlayers = interaction.options.getInteger('max_jugadores')
       const durationHours = interaction.options.getInteger('duracion_horas', true)
       const withEvent = interaction.options.getBoolean('evento') ?? true
 
       await interaction.deferReply()
 
       try {
+        const limit = resolveTournamentLimit(mode, maxTeams, maxPlayers)
         const active = await getActiveTournament()
 
         if (active) {
@@ -373,7 +475,7 @@ export default {
         }
 
         const startTime = buildStartTime(day, month, year, hours, minutes)
-        const tournament = await createTournament(name, startTime, maxTeams)
+        const tournament = await createTournament(name, startTime, mode, limit)
         const eventId = withEvent
           ? await syncTournamentEvent(guild, tournament, durationHours)
           : null
@@ -381,6 +483,7 @@ export default {
         await interaction.editReply({
           embeds: [tournamentEmbed(tournament, eventId, durationHours)]
         })
+        scheduleTournamentPanelSync(interaction.client)
       } catch (error) {
         logger.error('No se pudo crear el torneo', {
           reason: error instanceof Error ? error.message : 'Unknown error'
@@ -400,6 +503,7 @@ export default {
       const hours = interaction.options.getInteger('hora')
       const minutes = interaction.options.getInteger('minuto')
       const maxTeams = interaction.options.getInteger('max_equipos')
+      const maxPlayers = interaction.options.getInteger('max_jugadores')
       const durationHours = interaction.options.getInteger('duracion_horas')
 
       await interaction.deferReply()
@@ -410,6 +514,27 @@ export default {
         if (!tournament) {
           await interaction.editReply({
             content: 'No hay ningún torneo abierto para actualizar.'
+          })
+          return
+        }
+
+        if (maxTeams != null && maxPlayers != null) {
+          await interaction.editReply({
+            content: 'Indica solo el límite correspondiente a la modalidad del torneo.'
+          })
+          return
+        }
+
+        if (maxTeams != null && tournament.mode === 'solo') {
+          await interaction.editReply({
+            content: 'Este torneo es individual: usa **max_jugadores**, no **max_equipos**.'
+          })
+          return
+        }
+
+        if (maxPlayers != null && tournament.mode !== 'solo') {
+          await interaction.editReply({
+            content: 'Este torneo es por equipos: usa **max_equipos**, no **max_jugadores**.'
           })
           return
         }
@@ -435,6 +560,7 @@ export default {
           dateParts.every(value => value == null) &&
           timeParts.every(value => value == null) &&
           maxTeams == null &&
+          maxPlayers == null &&
           durationHours == null
         ) {
           await interaction.editReply({
@@ -456,7 +582,8 @@ export default {
 
         const updated = await updateTournament(tournament._id.toString(), {
           startTime,
-          maxTeams: maxTeams ?? undefined
+          maxTeams: maxTeams ?? undefined,
+          maxPlayers: maxPlayers ?? undefined
         })
 
         if (startTime || durationHours != null) {
@@ -464,17 +591,24 @@ export default {
         }
 
         const timestamp = Math.floor(updated.startTime.getTime() / 1000)
+        const isSolo = updated.mode === 'solo'
         const embed = new EmbedBuilder()
           .setColor('Blue')
           .setTitle('🔁 Torneo actualizado')
           .setDescription(`**${updated.name}**`)
-.addFields(
+          .addFields(
             {
               name: '📅 Inicio',
               value: `**${formatSpainDateTime(updated.startTime)}**\n<t:${timestamp}:R>`,
               inline: true
             },
-            { name: '👥 Equipos', value: `**${updated.teams.length}/${updated.maxTeams}**`, inline: true },
+            {
+              name: isSolo ? '👤 Jugadores' : '👥 Equipos',
+              value: isSolo
+                ? `**${updated.players.length}/${updated.maxPlayers}**`
+                : `**${updated.teams.length}/${updated.maxTeams}**`,
+              inline: true
+            },
             {
               name: '⏱️ Duración del evento',
               value: durationHours != null ? `**${durationHours} h**` : '**Sin cambios**',
@@ -484,6 +618,7 @@ export default {
           .setTimestamp()
 
         await interaction.editReply({ embeds: [embed] })
+        scheduleTournamentPanelSync(interaction.client)
       } catch (error) {
         logger.error('No se pudo actualizar el torneo', {
           reason: error instanceof Error ? error.message : 'Unknown error'
@@ -496,31 +631,73 @@ export default {
       return
     }
 
-    if (subcommand === 'panel') {
-      const channelId = interaction.options.getChannel('canal')?.id ?? interaction.channelId
-      const channel = await guild.channels.fetch(channelId).catch(() => null)
+    if (subcommand === 'configurar') {
+      const inscriptionSelected = interaction.options.getChannel('canal_inscripciones')
+      const inscritosSelected = interaction.options.getChannel('canal_inscritos')
+      const update = interaction.options.getBoolean('actualizar') ?? false
 
-      if (!channel || !channel.isSendable()) {
+      if (!inscriptionSelected && !inscritosSelected && !update) {
         await interaction.reply({
-          content: 'Indica un canal de texto válido.'
+          content: 'Indica un canal o activa `actualizar`.',
+          ephemeral: true
         })
         return
       }
 
-      await interaction.deferReply()
+      await interaction.deferReply({ ephemeral: true })
 
       try {
-        const tournament = await getActiveTournament()
-        await channel.send(buildInscriptionsPanel(tournament))
-        await interaction.editReply({
-          content: `Panel de inscripciones publicado en <#${channel.id}>.`
-        })
+        if (inscriptionSelected) {
+          const channel = await guild.channels.fetch(inscriptionSelected.id).catch(() => null)
+
+          if (!channel || !channel.isTextBased() || channel.isDMBased()) {
+            await interaction.editReply({
+              content: '❌ El canal de inscripciones no es válido.'
+            })
+            return
+          }
+
+          await syncInscriptionPanel(interaction.client, channel as TextChannel)
+        } else if (update) {
+          await syncInscriptionPanel(interaction.client)
+        }
+
+        if (inscritosSelected) {
+          const channel = await guild.channels.fetch(inscritosSelected.id).catch(() => null)
+
+          if (!channel || !channel.isTextBased() || channel.isDMBased()) {
+            await interaction.editReply({
+              content: '❌ El canal de inscritos no es válido.'
+            })
+            return
+          }
+
+          await configureTournamentPanel(interaction.client, channel as TextChannel)
+        } else if (update || inscriptionSelected) {
+          await syncTournamentPanel(interaction.client, true)
+        }
+
+        const lines: string[] = []
+
+        if (inscriptionSelected) {
+          lines.push(`📝 Inscripciones: <#${inscriptionSelected.id}>`)
+        }
+
+        if (inscritosSelected) {
+          lines.push(`🏆 Inscritos: <#${inscritosSelected.id}>`)
+        }
+
+        if (!lines.length) {
+          lines.push('✅ Paneles actualizados con los datos actuales.')
+        }
+
+        await interaction.editReply({ content: lines.join('\n') })
       } catch (error) {
-        logger.error('No se pudo publicar el panel de torneos', {
+        logger.error('No se pudo configurar los paneles de torneos', {
           reason: error instanceof Error ? error.message : 'Unknown error'
         })
         await interaction.editReply({
-          content: 'No se pudo publicar el panel. Revisa los permisos del bot.'
+          content: `❌ ${error instanceof Error ? error.message : 'No se pudieron configurar los paneles.'}`
         })
       }
 
@@ -534,6 +711,7 @@ export default {
       try {
         const result = await cancelTournament(guild, tournamentName)
         const timestamp = Math.floor(result.tournament.startTime.getTime() / 1000)
+        const isSolo = result.tournament.mode === 'solo'
 
         const embed = new EmbedBuilder()
           .setColor('Red')
@@ -546,8 +724,10 @@ export default {
               inline: true
             },
             {
-              name: 'Equipos inscritos',
-              value: `${result.tournament.teams.length}/${result.tournament.maxTeams}`,
+              name: isSolo ? 'Jugadores inscritos' : 'Equipos inscritos',
+              value: isSolo
+                ? `${result.tournament.players.length}/${result.tournament.maxPlayers}`
+                : `${result.tournament.teams.length}/${result.tournament.maxTeams}`,
               inline: true
             },
             {
@@ -562,6 +742,7 @@ export default {
           .setTimestamp()
 
         await interaction.editReply({ embeds: [embed] })
+        scheduleTournamentPanelSync(interaction.client)
       } catch (error) {
         logger.error('No se pudo cancelar el torneo', {
           reason: error instanceof Error ? error.message : 'Unknown error'

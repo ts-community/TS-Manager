@@ -19,6 +19,7 @@ import {
   isEntryActive
 } from '@/services/blacklist'
 import { removeUserFromTournamentSystem } from '@/services/tournament'
+import { scheduleTournamentPanelSync } from '@/services/tournamentPanel'
 
 const CATEGORY_NAMES: Record<BlacklistType, string> = {
   tournaments: 'Torneos',
@@ -235,6 +236,7 @@ export default {
           await removeUserFromTournamentSystem(user.id).catch(error => {
             console.warn('[BLACKLIST] No se pudo eliminar el equipo del usuario:', error)
           })
+          scheduleTournamentPanelSync(interaction.client)
         }
 
         const entry = blacklist[category]

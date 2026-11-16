@@ -16,12 +16,18 @@ import {
 import Tournament, { type TournamentDocument } from '@/models/Tournament'
 import Team, { type TeamDocument } from '@/models/Team'
 import User from '@/models/User'
-import type { TournamentStatus, TournamentTeam } from '@/types/tournament'
+import type {
+  TournamentMode,
+  TournamentPlayer,
+  TournamentStatus,
+  TournamentTeam
+} from '@/types/tournament'
 import { isBlacklisted } from '@/services/blacklist'
 import logger from '@/utils/logger'
 import { formatSpainDateTime } from '@/utils/datetime'
 
 export const MAX_TEAMS_OPTIONS = [8, 12, 16, 24, 32]
+export const MAX_PLAYERS_OPTIONS = MAX_TEAMS_OPTIONS
 
 export const TOURNAMENT_COLOR = 0xf59e0b
 export const TEAM_COLOR = 0x3b82f6
@@ -58,29 +64,40 @@ export function buildInscriptionsPanel(
 ): TournamentV2Payload {
   const container = new ContainerBuilder().setAccentColor(TOURNAMENT_COLOR)
 
+  const isSolo = tournament?.mode === 'solo'
+
   container.addTextDisplayComponents(text('## 🏆 Inscripciones a torneos'))
   container.addSeparatorComponents(separator())
   container.addTextDisplayComponents(
     text([
-      'Crea tu equipo, invita a tus compañeros y compite contra los mejores.',
-      '-# Para crear un equipo e inscribirlo, todos los integrantes deben tener su cuenta de Brawl Stars verificada.'
+      isSolo
+        ? 'Inscríbete individualmente y compite contra otros jugadores.'
+        : 'Crea tu equipo, invita a tus compañeros y compite contra los mejores.',
+      '-# No hace falta verificación ni vincular Brawl Stars para participar.'
     ].join('\n'))
   )
   container.addSeparatorComponents(separator())
 
   if (tournament) {
     const timestamp = Math.floor(tournament.startTime.getTime() / 1000)
+    const count = isSolo
+      ? `${tournament.players.length}/${tournament.maxPlayers}`
+      : `${tournament.teams.length}/${tournament.maxTeams}`
 
     container.addTextDisplayComponents(
       text([
         `### ${tournament.name}`,
         `📅 Inicio: **${formatSpainDateTime(tournament.startTime)}** (<t:${timestamp}:R>)`,
-        `👥 Equipos: **${tournament.teams.length}/${tournament.maxTeams}**`
+        `${isSolo ? '👤 Jugadores' : '👥 Equipos'}: **${count}**`
       ].join('\n'))
     )
     container.addSeparatorComponents(separator())
     container.addTextDisplayComponents(
-      text('-# Crea tu equipo con al menos 3 titulares y pulsa **Inscribirse**.')
+      text(
+        isSolo
+          ? '-# Pulsa **Inscribirme**. No necesitas crear ni pertenecer a un equipo.'
+          : '-# Crea tu equipo con al menos 3 titulares y pulsa **Inscribirse**.'
+      )
     )
     container.addSeparatorComponents(separator())
   } else {
@@ -89,25 +106,42 @@ export function buildInscriptionsPanel(
     )
   }
 
-  container.addActionRowComponents(
-    new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId('torneo:inscribirse')
-        .setLabel('Inscribirse')
-        .setEmoji('📝')
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId('torneo:crear-equipo')
-        .setLabel('Crear Equipo')
-        .setEmoji('➕')
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId('torneo:ver-equipo')
-        .setLabel('Ver Equipo')
-        .setEmoji('👀')
-        .setStyle(ButtonStyle.Secondary)
+  if (isSolo) {
+    container.addActionRowComponents(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId('torneo:inscribirse')
+          .setLabel('Inscribirme')
+          .setEmoji('📝')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId('torneo:retirarse')
+          .setLabel('Retirarme')
+          .setEmoji('🚪')
+          .setStyle(ButtonStyle.Danger)
+      )
     )
-  )
+  } else {
+    container.addActionRowComponents(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId('torneo:inscribirse')
+          .setLabel('Inscribirse')
+          .setEmoji('📝')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId('torneo:crear-equipo')
+          .setLabel('Crear Equipo')
+          .setEmoji('➕')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId('torneo:ver-equipo')
+          .setLabel('Ver Equipo')
+          .setEmoji('👀')
+          .setStyle(ButtonStyle.Secondary)
+      )
+    )
+  }
 
   return {
     flags: MessageFlags.IsComponentsV2,
@@ -175,9 +209,11 @@ export async function buildTeamView(
       `## 🛡️ ${team.name}`,
       `-# ${team.members.length}/5 miembros · ${activeMembers}/3 titulares · ${substituteCount}/2 suplentes`,
       activeTournament
-        ? isRegistered
-          ? `-# ✅ Inscrito en **${activeTournament.name}**`
-          : `-# 📝 Aún no inscrito en **${activeTournament.name}**`
+        ? activeTournament.mode === 'solo'
+          ? '-# El torneo activo es individual y no admite equipos.'
+          : isRegistered
+            ? `-# ✅ Inscrito en **${activeTournament.name}**`
+            : `-# 📝 Aún no inscrito en **${activeTournament.name}**`
         : '-# No hay ningún torneo abierto ahora mismo.'
     ].join('\n'))
   )
@@ -269,22 +305,33 @@ export async function buildTeamView(
 export async function createTournament(
   name: string,
   startTime: Date,
-  maxTeams: number
+  mode: TournamentMode,
+  limit: number
 ) {
   if (!name.trim()) throw new Error('El torneo debe tener un nombre.')
   if (Number.isNaN(startTime.getTime()) || startTime <= new Date()) {
     throw new Error('La fecha de inicio debe ser futura.')
   }
-  if (!MAX_TEAMS_OPTIONS.includes(maxTeams)) {
-    throw new Error('El máximo de equipos debe ser 8, 12, 16, 24 o 32.')
+  if (mode !== 'teams' && mode !== 'solo') {
+    throw new Error('La modalidad del torneo no es válida.')
+  }
+  if (!MAX_TEAMS_OPTIONS.includes(limit)) {
+    throw new Error(
+      mode === 'solo'
+        ? 'El máximo de jugadores debe ser 8, 12, 16, 24 o 32.'
+        : 'El máximo de equipos debe ser 8, 12, 16, 24 o 32.'
+    )
   }
 
   return Tournament.create({
     name: name.trim(),
     startTime,
-    maxTeams,
+    mode,
+    maxTeams: mode === 'teams' ? limit : 0,
+    maxPlayers: mode === 'solo' ? limit : 0,
     status: 'open',
-    teams: []
+    teams: [],
+    players: []
   })
 }
 
@@ -378,6 +425,9 @@ export async function registerTeam(
       const tournament = await Tournament.findById(tournamentId).session(session)
 
       if (!tournament) throw new Error('No se ha encontrado el torneo.')
+      if (tournament.mode === 'solo') {
+        throw new Error('Este torneo es individual y no admite equipos.')
+      }
       if (tournament.status !== 'open') {
         throw new Error('El torneo no está aceptando inscripciones.')
       }
@@ -426,9 +476,6 @@ export async function registerTeam(
         if (!user.teamId?.equals(team._id)) {
           throw new Error('La pertenencia al equipo no es válida.')
         }
-        if (!user.brawlId) {
-          throw new Error(`El usuario ${user.discordId} debe vincular su cuenta de Brawl Stars.`)
-        }
         if (await isBlacklisted(user.discordId, 'tournaments', session)) {
           throw new Error(`El usuario ${user.discordId} está en la blacklist de torneos.`)
         }
@@ -436,7 +483,7 @@ export async function registerTeam(
         members.push({
           userId: user._id,
           discordId: user.discordId,
-          brawlId: user.brawlId,
+          brawlId: user.brawlId ?? '',
           role: member.role
         })
       }
@@ -481,6 +528,9 @@ export async function unregisterTeam(
       const tournament = await Tournament.findById(tournamentId).session(session)
 
       if (!tournament) throw new Error('No se ha encontrado el torneo.')
+      if (tournament.mode === 'solo') {
+        throw new Error('Este torneo es individual y no admite equipos.')
+      }
       if (tournament.status !== 'open') {
         throw new Error('Ya no se pueden retirar equipos de este torneo.')
       }
@@ -496,6 +546,108 @@ export async function unregisterTeam(
       }
 
       tournament.teams.splice(teamIndex, 1)
+      await tournament.save({ session })
+      result.push(tournament)
+    })
+
+    return result[0]
+  } finally {
+    await session.endSession()
+  }
+}
+
+export async function registerSoloPlayer(
+  tournamentId: string,
+  discordId: string
+) {
+  const session = await mongoose.startSession()
+  const result: TournamentDocument[] = []
+
+  try {
+    await session.withTransaction(async () => {
+      const tournament = await Tournament.findById(tournamentId).session(session)
+
+      if (!tournament) throw new Error('No se ha encontrado el torneo.')
+      if (tournament.mode !== 'solo') {
+        throw new Error('Este torneo es por equipos y no admite inscripciones individuales.')
+      }
+      if (tournament.status !== 'open') {
+        throw new Error('El torneo no está aceptando inscripciones.')
+      }
+      if (tournament.startTime <= new Date()) {
+        throw new Error('El torneo ya ha comenzado.')
+      }
+      if (tournament.players.length >= tournament.maxPlayers) {
+        throw new Error('El torneo está completo.')
+      }
+
+      const user = await User.findOneAndUpdate(
+        { discordId },
+        { $setOnInsert: { discordId, teamId: null } },
+        { upsert: true, new: true, runValidators: true, session }
+      )
+
+      if (!user) throw new Error('No se ha encontrado tu cuenta.')
+      if (await isBlacklisted(discordId, 'tournaments', session)) {
+        throw new Error('Estás en la blacklist de torneos.')
+      }
+
+      const alreadyRegistered = tournament.players.some(
+        player => player.userId.equals(user._id)
+      ) || tournament.teams.some(team =>
+        team.members.some(member => member.userId.equals(user._id))
+      )
+
+      if (alreadyRegistered) {
+        throw new Error('Ya estás inscrito en este torneo.')
+      }
+
+      const player: TournamentPlayer = {
+        userId: user._id,
+        discordId: user.discordId,
+        brawlId: user.brawlId ?? '',
+        registeredAt: new Date()
+      }
+
+      tournament.players.push(player)
+      await tournament.save({ session })
+      result.push(tournament)
+    })
+
+    return result[0]
+  } finally {
+    await session.endSession()
+  }
+}
+
+export async function unregisterSoloPlayer(
+  tournamentId: string,
+  discordId: string
+) {
+  const session = await mongoose.startSession()
+  const result: TournamentDocument[] = []
+
+  try {
+    await session.withTransaction(async () => {
+      const tournament = await Tournament.findById(tournamentId).session(session)
+
+      if (!tournament) throw new Error('No se ha encontrado el torneo.')
+      if (tournament.mode !== 'solo') {
+        throw new Error('Este torneo es por equipos y no admite retiradas individuales.')
+      }
+      if (tournament.status !== 'open') {
+        throw new Error('Ya no puedes retirarte de este torneo.')
+      }
+
+      const playerIndex = tournament.players.findIndex(
+        player => player.discordId === discordId
+      )
+
+      if (playerIndex === -1) {
+        throw new Error('No estás inscrito en este torneo.')
+      }
+
+      tournament.players.splice(playerIndex, 1)
       await tournament.save({ session })
       result.push(tournament)
     })
@@ -542,7 +694,7 @@ export async function deleteTournament(tournamentId: string) {
 
 export async function updateTournament(
   tournamentId: string,
-  updates: { startTime?: Date; maxTeams?: number }
+  updates: { startTime?: Date; maxTeams?: number; maxPlayers?: number }
 ) {
   const tournament = await Tournament.findById(tournamentId)
   if (!tournament) throw new Error('No se ha encontrado el torneo.')
@@ -557,7 +709,14 @@ export async function updateTournament(
     tournament.startTime = updates.startTime
   }
 
+  if (updates.maxTeams !== undefined && updates.maxPlayers !== undefined) {
+    throw new Error('Indica solo el límite correspondiente a la modalidad del torneo.')
+  }
+
   if (updates.maxTeams !== undefined) {
+    if (tournament.mode === 'solo') {
+      throw new Error('Este torneo es individual: usa el máximo de jugadores, no de equipos.')
+    }
     if (!MAX_TEAMS_OPTIONS.includes(updates.maxTeams)) {
       throw new Error('El máximo de equipos debe ser 8, 12, 16, 24 o 32.')
     }
@@ -567,6 +726,21 @@ export async function updateTournament(
       )
     }
     tournament.maxTeams = updates.maxTeams
+  }
+
+  if (updates.maxPlayers !== undefined) {
+    if (tournament.mode !== 'solo') {
+      throw new Error('Este torneo es por equipos: usa el máximo de equipos, no de jugadores.')
+    }
+    if (!MAX_PLAYERS_OPTIONS.includes(updates.maxPlayers)) {
+      throw new Error('El máximo de jugadores debe ser 8, 12, 16, 24 o 32.')
+    }
+    if (updates.maxPlayers < tournament.players.length) {
+      throw new Error(
+        `No puedes reducir el máximo por debajo de los ${tournament.players.length} jugadores ya inscritos.`
+      )
+    }
+    tournament.maxPlayers = updates.maxPlayers
   }
 
   await tournament.save()
@@ -632,15 +806,26 @@ export async function syncTournamentEvent(
 
 export async function removeUserFromTournamentSystem(
   discordId: string
-): Promise<{ teamRemoved: boolean }> {
+): Promise<{ teamRemoved: boolean; soloRemoved: boolean }> {
   const user = await User.findOne({ discordId })
-  if (!user?.teamId) return { teamRemoved: false }
+  if (!user) return { teamRemoved: false, soloRemoved: false }
 
   const session = await mongoose.startSession()
   let teamRemoved = false
+  let soloRemoved = false
 
   try {
     await session.withTransaction(async () => {
+      const soloResult = await Tournament.updateMany(
+        { status: 'open', 'players.userId': user._id },
+        { $pull: { players: { userId: user._id } } },
+        { session }
+      )
+
+      soloRemoved = soloResult.modifiedCount > 0
+
+      if (!user.teamId) return
+
       const team = await Team.findById(user.teamId).session(session)
 
       if (!team) {
@@ -723,5 +908,5 @@ export async function removeUserFromTournamentSystem(
     await session.endSession()
   }
 
-  return { teamRemoved }
+  return { teamRemoved, soloRemoved }
 }

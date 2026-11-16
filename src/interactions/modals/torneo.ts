@@ -3,7 +3,7 @@ import User from '../../models/User'
 import { isBlacklisted } from '../../services/blacklist'
 import { addTeamMember, createTeam, deleteTeam, getUserTeam, renameTeam } from '../../services/team'
 import { buildTeamView } from '../../services/tournament'
-import { isUserVerified } from '../../services/verification'
+import { scheduleTournamentPanelSync } from '../../services/tournamentPanel'
 
 export default {
   customId: 'torneo',
@@ -28,15 +28,6 @@ export default {
 
     if (action === 'create-team') {
       const name = interaction.fields.getTextInputValue('nombre').trim()
-
-      if (!(await isUserVerified(guild.id, interaction.user.id))) {
-        await interaction.reply({
-          content: 'Debes verificar tu cuenta de Brawl Stars antes de crear un equipo.',
-          ephemeral: true
-        })
-        return
-      }
-
       const existing = await getUserTeam(interaction.user.id)
 
       if (existing) {
@@ -87,11 +78,6 @@ export default {
 
           if (!target || target.user.bot) {
             problems.push(`<@${id}> no es un miembro válido del servidor.`)
-            continue
-          }
-
-          if (!(await isUserVerified(guild.id, id))) {
-            problems.push(`<@${id}> no está verificado.`)
             continue
           }
 
@@ -167,6 +153,7 @@ export default {
 
         const view = await buildTeamView(team, interaction.user.id, guild.id)
         await interaction.editReply(view)
+        scheduleTournamentPanelSync(interaction.client)
       } catch (error) {
         await interaction.editReply({
           content: `❌ ${error instanceof Error ? error.message : 'No se pudo renombrar el equipo.'}`

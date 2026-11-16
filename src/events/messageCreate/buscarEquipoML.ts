@@ -19,7 +19,8 @@ const MAX_REPLY_CONTENT_LENGTH = 1500
 const REDIRECT_MIN_SCORE = 0.85
 const REDIRECT_COOLDOWN_MS = 30 * 60 * 1000
 /** Señales de Brawl Stars en el texto (juego, abreviaturas, modos, rangos, objetos...). */
-const BRAWL_CONTEXT = /\b(brawl(?:s|\s*stars)?|brawlers?|bs|p(?:1[01]|[1-9])|copas?|trofeos?|pushe(?:ar|o|ando|amos)|m[ií]tic[oa]s?|legendari[oa]s?|atrapagemas|bal[oó]n brawl|brawlball|noqueo|supervivencia|asedio|caza estelar|supercell|3v3|gadgets?|star ?powers?|hipercargas?|maxe(?:ar|ado|ando|o))\b|b\.\s?s\.?/iu
+/** Incluye "braw" (abreviatura común) y fallos ortográficos frecuentes de "brawl". */
+const BRAWL_CONTEXT = /\b(brawl(?:s|\s*stars)?|brawlers?|braw|bral|braw1|braw1s?|bs|p(?:1[01]|[1-9])|copas?|trofeos?|pushe(?:ar|o|ando|amos)|m[ií]tic[oa]s?|legendari[oa]s?|atrapagemas|bal[oó]n brawl|brawlball|noqueo|supervivencia|asedio|caza estelar|supercell|3v3|gadgets?|star ?powers?|hipercargas?|maxe(?:ar|ado|ando|o))\b|b\.\s?s\.?/iu
 /** Mensajes sobre clubes no son búsquedas de equipo. */
 const CLUB_CONTEXT = /\b(?:clubs?|clubes|clans?|clanes)\b/iu
 

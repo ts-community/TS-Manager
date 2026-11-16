@@ -5,6 +5,7 @@ import { mongoURL } from '../../config/env'
 import logger from '../../utils/logger'
 import { publishServiceThreads } from '../../services/services'
 import { schedulePanelsSync } from '../../services/asociaciones'
+import { scheduleTournamentPanelSync } from '../../services/tournamentPanel'
 import { startTagRoleManager } from '../../services/tagRole'
 
 const RESTART_NOTIFY_THREAT_ID = '1569786641910857930'
@@ -45,6 +46,7 @@ export default {
     // Sincroniza los paneles a los 15s de arrancar (con debounce para no re-renderizar por cada cambio)
     // Va después de conectar la BD porque syncPanels consulta las asociaciones
     schedulePanelsSync(client, 15_000)
+    scheduleTournamentPanelSync(client, 15_000)
 
     // El gestor del rol por etiqueta TS no debe bloquear/fallar el resto del arranque
     startTagRoleManager(client).catch(error => {

@@ -15,9 +15,14 @@ import Team from '../../models/Team'
 import User from '../../models/User'
 import { isBlacklisted } from '../../services/blacklist'
 import { deleteTeam, getUserTeam, leaveTeam } from '../../services/team'
-import { getActiveTournament, registerTeam } from '../../services/tournament'
+import {
+  getActiveTournament,
+  registerSoloPlayer,
+  registerTeam,
+  unregisterSoloPlayer
+} from '../../services/tournament'
 import { buildTeamView } from '../../services/tournament'
-import { isUserVerified } from '../../services/verification'
+import { scheduleTournamentPanelSync } from '../../services/tournamentPanel'
 
 function createTeamRow() {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -125,6 +130,19 @@ export default {
           return
         }
 
+        if (tournament.mode === 'solo') {
+          const updated = await registerSoloPlayer(
+            tournament._id.toString(),
+            interaction.user.id
+          )
+
+          await interaction.editReply({
+            content: `✅ Te has inscrito en **${updated?.name ?? tournament.name}** (${updated?.players.length ?? tournament.players.length}/${updated?.maxPlayers ?? tournament.maxPlayers} jugadores).`
+          })
+          scheduleTournamentPanelSync(interaction.client)
+          return
+        }
+
         if (tournament.teams.length >= tournament.maxTeams) {
           await interaction.editReply({ content: 'El torneo ya está completo.' })
           return
@@ -178,11 +196,6 @@ export default {
             continue
           }
 
-          if (!(await isUserVerified(guild.id, record.discordId))) {
-            problems.push(`<@${record.discordId}> no está verificado.`)
-            continue
-          }
-
           if (await isBlacklisted(record.discordId, 'tournaments')) {
             problems.push(`<@${record.discordId}> está en la blacklist de torneos.`)
           }
@@ -205,6 +218,7 @@ export default {
         await interaction.editReply({
           content: `✅ **${team.name}** inscrito en **${updated?.name ?? tournament.name}** (${updated?.teams.length ?? tournament.teams.length}/${updated?.maxTeams ?? tournament.maxTeams}).`
         })
+        scheduleTournamentPanelSync(interaction.client)
       } catch (error) {
         await interaction.editReply({
           content: `❌ ${error instanceof Error ? error.message : 'No se pudo inscribir al equipo.'}`
@@ -214,15 +228,43 @@ export default {
       return
     }
 
-    if (action === 'crear-equipo') {
-      if (!(await isUserVerified(guild.id, interaction.user.id))) {
-        await interaction.reply({
-          content: 'Debes verificar tu cuenta de Brawl Stars antes de crear un equipo.',
-          ephemeral: true
+    if (action === 'retirarse') {
+      await interaction.deferReply({ ephemeral: true })
+
+      try {
+        const tournament = await getActiveTournament()
+
+        if (!tournament) {
+          await interaction.editReply({ content: 'No hay ningún torneo abierto ahora mismo.' })
+          return
+        }
+
+        if (tournament.mode !== 'solo') {
+          await interaction.editReply({
+            content: 'Este torneo es por equipos: la retirada se gestiona desde el equipo.'
+          })
+          return
+        }
+
+        const updated = await unregisterSoloPlayer(
+          tournament._id.toString(),
+          interaction.user.id
+        )
+
+        await interaction.editReply({
+          content: `🚪 Te has retirado de **${updated?.name ?? tournament.name}** (${updated?.players.length ?? tournament.players.length}/${updated?.maxPlayers ?? tournament.maxPlayers} jugadores).`
         })
-        return
+        scheduleTournamentPanelSync(interaction.client)
+      } catch (error) {
+        await interaction.editReply({
+          content: `❌ ${error instanceof Error ? error.message : 'No se pudo completar la retirada.'}`
+        })
       }
 
+      return
+    }
+
+    if (action === 'crear-equipo') {
       const existing = await getUserTeam(interaction.user.id)
 
       if (existing) {
@@ -458,6 +500,7 @@ export default {
       try {
         await leaveTeam(teamId, interaction.user.id)
         await interaction.editReply({ content: '🚪 Has salido del equipo.' })
+        scheduleTournamentPanelSync(interaction.client)
       } catch (error) {
         await interaction.editReply({
           content: `❌ ${error instanceof Error ? error.message : 'No se pudo salir del equipo.'}`

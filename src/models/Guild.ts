@@ -20,8 +20,12 @@ export interface GuildConfig {
   starboardThreshold: number
   verifiedRoleId: string | null
   verificationThreadId: string | null
+  tournamentInscriptionChannelId: string | null
   inscriptionPanelMessageId: string | null
   verificationPanelMessageId: string | null
+  tournamentPanelChannelId: string | null
+  tournamentPanelMessageId: string | null
+  tournamentPanelHash: string | null
 }
 
 const purgeChannelSchema = new mongoose.Schema<PurgeChannelConfig>({
@@ -37,8 +41,12 @@ const guildSchema = new mongoose.Schema<GuildConfig>({
   starboardThreshold: { type: Number, default: 3 },
   verifiedRoleId: { type: String, default: null },
   verificationThreadId: { type: String, default: null },
+  tournamentInscriptionChannelId: { type: String, default: null },
   inscriptionPanelMessageId: { type: String, default: null },
-  verificationPanelMessageId: { type: String, default: null }
+  verificationPanelMessageId: { type: String, default: null },
+  tournamentPanelChannelId: { type: String, default: null },
+  tournamentPanelMessageId: { type: String, default: null },
+  tournamentPanelHash: { type: String, default: null }
 })
 
 export type GuildDocument = mongoose.HydratedDocument<GuildConfig>

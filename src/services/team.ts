@@ -67,16 +67,10 @@ export async function syncTeamSnapshots(
       throw new Error('No se ha encontrado un integrante del equipo.')
     }
 
-    if (!user.brawlId) {
-      throw new Error(
-        `El usuario ${user.discordId} debe vincular su cuenta de Brawl Stars.`
-      )
-    }
-
     return {
       userId: user._id,
       discordId: user.discordId,
-      brawlId: user.brawlId,
+      brawlId: user.brawlId ?? '',
       role: member.role
     }
   })
@@ -133,7 +127,11 @@ export async function createTeam(discordId: string, name: string) {
 
   try {
     await session.withTransaction(async () => {
-      const user = await User.findOne({ discordId }).session(session)
+      const user = await User.findOneAndUpdate(
+        { discordId },
+        { $setOnInsert: { discordId, teamId: null } },
+        { upsert: true, new: true, runValidators: true, session }
+      )
 
       if (!user) throw new Error('No se ha encontrado al usuario.')
       if (user.teamId) throw new Error('Ya perteneces a un equipo.')
@@ -178,9 +176,11 @@ export async function addTeamMember(
         discordId: leaderDiscordId
       }).session(session)
 
-      const member = await User.findOne({
-        discordId: memberDiscordId
-      }).session(session)
+      const member = await User.findOneAndUpdate(
+        { discordId: memberDiscordId },
+        { $setOnInsert: { discordId: memberDiscordId, teamId: null } },
+        { upsert: true, new: true, runValidators: true, session }
+      )
 
       if (!leader || !member) {
         throw new Error('No se ha encontrado alguno de los usuarios.')
@@ -221,12 +221,6 @@ export async function addTeamMember(
       }).session(session)
 
       if (registeredTournament) {
-        if (!member.brawlId) {
-          throw new Error(
-            'El nuevo integrante debe vincular su cuenta de Brawl Stars.'
-          )
-        }
-
         if (await isBlacklisted(memberDiscordId, 'tournaments', session)) {
           throw new Error('Este usuario está en la blacklist de torneos.')
         }

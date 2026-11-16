@@ -138,18 +138,6 @@ export async function unlinkBrawlAccount(discordId: string) {
     throw new Error('No se ha encontrado al usuario.')
   }
 
-  // No se puede desvincular si aparece en una inscripción abierta.
-  const registered = await Tournament.exists({
-    status: 'open',
-    'teams.members.userId': user._id
-  })
-
-  if (registered) {
-    throw new Error(
-      'No puedes desvincular tu cuenta de Brawl Stars mientras estés inscrito en un torneo abierto.'
-    )
-  }
-
   user.brawlId = null
 
   await user.save()

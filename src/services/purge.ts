@@ -10,7 +10,11 @@ export async function runChannelPurges(client: Client): Promise<void> {
   const config = await getGuildConfig()
   const now = Date.now()
   // Los paneles del bot (verificación, inscripciones) nunca se borran
-  const protectedIds = new Set([config.verificationPanelMessageId, config.inscriptionPanelMessageId].filter(Boolean))
+  const protectedIds = new Set([
+    config.verificationPanelMessageId,
+    config.inscriptionPanelMessageId,
+    config.tournamentPanelMessageId
+  ].filter(Boolean))
 
   for (const { channelId, intervalMinutes } of config.purgeChannels) {
     const last = lastPurgedAt.get(channelId) ?? 0

@@ -1,5 +1,9 @@
 import mongoose from 'mongoose'
-import type { TournamentData, TournamentTeam } from '@/types/tournament'
+import type {
+  TournamentData,
+  TournamentPlayer,
+  TournamentTeam
+} from '@/types/tournament'
 
 const tournamentTeamMemberSchema = new mongoose.Schema({
   userId: {
@@ -12,12 +16,31 @@ const tournamentTeamMemberSchema = new mongoose.Schema({
   },
   brawlId: {
     type: String,
-    required: true
+    default: ''
   },
   role: {
     type: String,
     enum: ['leader', 'member', 'substitute'],
     required: true
+  }
+}, { _id: false })
+
+const tournamentPlayerSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true
+  },
+  discordId: {
+    type: String,
+    required: true
+  },
+  brawlId: {
+    type: String,
+    default: ''
+  },
+  registeredAt: {
+    type: Date,
+    default: Date.now
   }
 }, { _id: false })
 
@@ -51,10 +74,22 @@ const tournamentSchema = new mongoose.Schema<TournamentData>({
     type: Date,
     required: true
   },
+  mode: {
+    type: String,
+    enum: ['teams', 'solo'],
+    default: 'teams',
+    required: true
+  },
   maxTeams: {
     type: Number,
     required: true,
-    enum: [8, 12, 16, 24, 32]
+    enum: [0, 8, 12, 16, 24, 32]
+  },
+  maxPlayers: {
+    type: Number,
+    required: true,
+    enum: [0, 8, 12, 16, 24, 32],
+    default: 0
   },
   status: {
     type: String,
@@ -73,6 +108,20 @@ const tournamentSchema = new mongoose.Schema<TournamentData>({
         return teams.length <= 32 && uniqueTeams.size === teams.length
       },
       message: 'Hay equipos duplicados o se ha superado el máximo de 32 equipos.'
+    }
+  },
+  players: {
+    type: [tournamentPlayerSchema],
+    default: [],
+    validate: {
+      validator: (players: TournamentPlayer[]) => {
+        const uniquePlayers = new Set(
+          players.map(player => player.userId.toString())
+        )
+
+        return players.length <= 32 && uniquePlayers.size === players.length
+      },
+      message: 'Hay jugadores duplicados o se ha superado el máximo de 32 jugadores.'
     }
   }
 })

@@ -10,7 +10,7 @@ import User, { type UserDocument } from '../../models/User'
 import { isBlacklisted } from '../../services/blacklist'
 import { addTeamMember, changeMemberRole, removeTeamMember } from '../../services/team'
 import { buildTeamView } from '../../services/tournament'
-import { isUserVerified } from '../../services/verification'
+import { scheduleTournamentPanelSync } from '../../services/tournamentPanel'
 import logger from '../../utils/logger'
 
 function isValidId(value: string | undefined): value is string {
@@ -91,10 +91,6 @@ export default {
           throw new Error('El usuario seleccionado no es válido.')
         }
 
-        if (!(await isUserVerified(guild.id, targetId))) {
-          throw new Error(`<@${targetId}> no está verificado.`)
-        }
-
         if (await isBlacklisted(targetId, 'tournaments')) {
           throw new Error(`<@${targetId}> está en la blacklist de torneos.`)
         }
@@ -106,6 +102,7 @@ export default {
         const view = await buildTeamView(team, interaction.user.id, guild.id)
         await interaction.editReply({ content: `✅ <@${targetId}> añadido al equipo.`, components: [] })
         await interaction.followUp(ephemeralView(view))
+        scheduleTournamentPanelSync(interaction.client)
       } catch (error) {
         await interaction.editReply({
           content: `❌ ${error instanceof Error ? error.message : 'No se pudo añadir al usuario.'}`,
@@ -145,6 +142,7 @@ export default {
             const view = await buildTeamView(team, interaction.user.id, guild.id)
             await interaction.editReply({ content: '✅ Miembro expulsado del equipo.', components: [] })
             await interaction.followUp(ephemeralView(view))
+            scheduleTournamentPanelSync(interaction.client)
           } catch (error) {
             if (error instanceof Error && error.message.startsWith('PROMOTION_REQUIRED:')) {
               const ids = error.message.slice('PROMOTION_REQUIRED:'.length).split(',').filter(isValidId)
@@ -197,6 +195,7 @@ export default {
           const view = await buildTeamView(team, interaction.user.id, guild.id)
           await interaction.editReply({ content: '✅ Miembro expulsado y suplente ascendido.', components: [] })
           await interaction.followUp(ephemeralView(view))
+          scheduleTournamentPanelSync(interaction.client)
           return
         }
 
@@ -216,6 +215,7 @@ export default {
           components: []
         })
         await interaction.followUp(ephemeralView(view))
+        scheduleTournamentPanelSync(interaction.client)
       } catch (error) {
         logger.warn('No se pudo gestionar un miembro del equipo', {
           user: interaction.user.id,
