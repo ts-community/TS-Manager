@@ -29,6 +29,12 @@ import logger from '@/utils/logger'
 
 export const DEFAULT_TOURNAMENT_INSCRIPTION_CHANNEL_ID = '1568936507270762517'
 
+const PANEL_CHANNEL_NAMES = {
+  none: '🏆-inscritos',
+  teams: '🏆-equipos',
+  solo: '🏆-jugadores'
+} as const
+
 const MAX_LIST_LENGTH = 2800
 
 interface TournamentPanelPayload extends TournamentV2Payload {
@@ -87,8 +93,9 @@ function buildTeamEntries(tournament: TournamentDocument): string[] {
     const members = team.members
       .map(member => `${TEAM_ROLE_EMOJI[member.role]} <@${member.discordId}>`)
       .join(' · ')
+    const memberLabel = team.members.length === 1 ? 'miembro' : 'miembros'
 
-    return `**${index + 1}. ${team.name}**\n${members}`
+    return `**${index + 1}. ${team.name}** · ${team.members.length} ${memberLabel}\n${members}`
   })
 }
 
@@ -106,19 +113,18 @@ function buildTournamentPanel(
   const container = new ContainerBuilder().setAccentColor(TOURNAMENT_COLOR)
 
   if (!tournament) {
-    container.addTextDisplayComponents(text('## 🏆 Inscritos'))
-    container.addSeparatorComponents(separator())
     container.addTextDisplayComponents(
-      text('No hay ningún torneo activo ahora mismo.')
+      text('## 🏆 Inscritos\n-# Torneos de la comunidad')
     )
     container.addSeparatorComponents(separator())
     container.addTextDisplayComponents(
-      text('-# Cuando se abra un torneo, aquí aparecerán los equipos o jugadores inscritos.')
+      text([
+        'No hay ningún torneo activo ahora mismo.',
+        '',
+        '-# Cuando se abra uno, aquí aparecerán los equipos o jugadores inscritos.'
+      ].join('\n'))
     )
     container.addSeparatorComponents(separator())
-    container.addTextDisplayComponents(
-      text(`-# Para inscribirte, ve a <#${inscriptionChannelId}>.`)
-    )
     container.addActionRowComponents(inscriptionButton(panelGuildId, inscriptionChannelId))
 
     return {
@@ -134,11 +140,12 @@ function buildTournamentPanel(
     ? `${tournament.players.length}/${tournament.maxPlayers}`
     : `${tournament.teams.length}/${tournament.maxTeams}`
 
-  container.addTextDisplayComponents(text(`## 🏆 ${tournament.name}`))
+  container.addTextDisplayComponents(
+    text(`## 🏆 ${tournament.name}\n-# Inscritos · ${isSolo ? 'Jugadores' : 'Por equipos'}`)
+  )
   container.addSeparatorComponents(separator())
   container.addTextDisplayComponents(
     text([
-      `-# ${isSolo ? 'Individual' : 'Por equipos'}`,
       `📅 **Inicio:** ${formatSpainDateTime(tournament.startTime)} (<t:${timestamp}:R>)`,
       `${isSolo ? '👤' : '👥'} **${isSolo ? 'Jugadores' : 'Equipos'}:** **${count}**`
     ].join('\n'))
@@ -148,14 +155,13 @@ function buildTournamentPanel(
     text([
       `### ${isSolo ? '👤 Jugadores inscritos' : '👥 Equipos inscritos'}`,
       isSolo
-        ? joinLimited(buildSoloEntries(tournament), '-# Todavía no hay jugadores inscritos. ¡Sé el primero!')
-        : joinLimited(buildTeamEntries(tournament), '-# Todavía no hay equipos inscritos. ¡Sé el primero!')
+        ? joinLimited(buildSoloEntries(tournament), '-# Aún no hay jugadores inscritos.')
+        : joinLimited(buildTeamEntries(tournament), '-# Aún no hay equipos inscritos.'),
+      '',
+      `-# Inscripciones en <#${inscriptionChannelId}> · pulsa **${isSolo ? 'Inscribirme' : 'Inscribirse'}**.`
     ].join('\n'))
   )
   container.addSeparatorComponents(separator())
-  container.addTextDisplayComponents(
-    text(`-# Para inscribirte, entra en <#${inscriptionChannelId}> y pulsa **${isSolo ? 'Inscribirme' : 'Inscribirse'}**.`)
-  )
   container.addActionRowComponents(inscriptionButton(panelGuildId, inscriptionChannelId))
 
   return {
@@ -185,6 +191,28 @@ async function deleteStoredMessage(
   await message?.delete().catch(() => null)
 }
 
+async function syncChannelName(
+  channel: TextChannel,
+  tournament: TournamentDocument | null
+): Promise<void> {
+  const name = !tournament
+    ? PANEL_CHANNEL_NAMES.none
+    : tournament.mode === 'solo'
+      ? PANEL_CHANNEL_NAMES.solo
+      : PANEL_CHANNEL_NAMES.teams
+
+  if (channel.name === name) return
+
+  try {
+    await channel.setName(name)
+  } catch (error) {
+    logger.warn('No se pudo renombrar el canal de inscritos', {
+      channelId: channel.id,
+      reason: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
+}
+
 export async function syncTournamentPanel(
   client: Client,
   force = false
@@ -212,6 +240,8 @@ export async function syncTournamentPanel(
   const tournament = await getActiveTournament()
   const inscriptionChannelId =
     config.tournamentInscriptionChannelId ?? DEFAULT_TOURNAMENT_INSCRIPTION_CHANNEL_ID
+
+  await syncChannelName(textChannel, tournament)
 
   const payload = buildTournamentPanel(tournament, guild.id, inscriptionChannelId)
   const hash = payloadHash(payload)

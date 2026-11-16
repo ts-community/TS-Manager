@@ -397,13 +397,13 @@ export default {
         .addChannelOption(option =>
           option
             .setName('canal_inscripciones')
-            .setDescription('Canal del panel de inscripciones con botones')
+            .setDescription('Canal del panel para inscribirse')
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         )
         .addChannelOption(option =>
           option
             .setName('canal_inscritos')
-            .setDescription('Canal donde se muestra el torneo activo y sus inscritos')
+            .setDescription('Canal de inscritos (cambia de nombre según el torneo activo)')
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         )
         .addBooleanOption(option =>
@@ -638,13 +638,12 @@ export default {
 
       if (!inscriptionSelected && !inscritosSelected && !update) {
         await interaction.reply({
-          content: 'Indica un canal o activa `actualizar`.',
-          ephemeral: true
+          content: 'Indica un canal o activa `actualizar`.'
         })
         return
       }
 
-      await interaction.deferReply({ ephemeral: true })
+      await interaction.deferReply()
 
       try {
         if (inscriptionSelected) {

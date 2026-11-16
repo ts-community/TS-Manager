@@ -66,15 +66,12 @@ export function buildInscriptionsPanel(
 
   const isSolo = tournament?.mode === 'solo'
 
-  container.addTextDisplayComponents(text('## 🏆 Inscripciones a torneos'))
-  container.addSeparatorComponents(separator())
   container.addTextDisplayComponents(
-    text([
-      isSolo
-        ? 'Inscríbete individualmente y compite contra otros jugadores.'
-        : 'Crea tu equipo, invita a tus compañeros y compite contra los mejores.',
-      '-# No hace falta verificación ni vincular Brawl Stars para participar.'
-    ].join('\n'))
+    text(
+      tournament
+        ? `## 🏆 ${tournament.name}\n-# Inscripciones · ${isSolo ? 'Jugadores' : 'Por equipos'}`
+        : '## 🏆 Inscripciones\n-# Torneos de la comunidad'
+    )
   )
   container.addSeparatorComponents(separator())
 
@@ -86,61 +83,67 @@ export function buildInscriptionsPanel(
 
     container.addTextDisplayComponents(
       text([
-        `### ${tournament.name}`,
-        `📅 Inicio: **${formatSpainDateTime(tournament.startTime)}** (<t:${timestamp}:R>)`,
-        `${isSolo ? '👤 Jugadores' : '👥 Equipos'}: **${count}**`
+        `📅 **Inicio:** ${formatSpainDateTime(tournament.startTime)} (<t:${timestamp}:R>)`,
+        `${isSolo ? '👤' : '👥'} **${isSolo ? 'Jugadores' : 'Equipos'}:** **${count}**`
       ].join('\n'))
     )
     container.addSeparatorComponents(separator())
     container.addTextDisplayComponents(
       text(
         isSolo
-          ? '-# Pulsa **Inscribirme**. No necesitas crear ni pertenecer a un equipo.'
-          : '-# Crea tu equipo con al menos 3 titulares y pulsa **Inscribirse**.'
+          ? 'Pulsa **Inscribirme** para participar. No necesitas equipo.'
+          : 'Crea tu equipo o inscríbete con el equipo que ya tienes.'
       )
     )
-    container.addSeparatorComponents(separator())
   } else {
     container.addTextDisplayComponents(
-      text('No hay ningún torneo abierto ahora mismo. Vuelve más tarde.')
+      text([
+        'No hay ningún torneo abierto ahora mismo.',
+        '',
+        '-# Cuando se abra uno, aparecerá aquí con toda la información.'
+      ].join('\n'))
     )
   }
 
-  if (isSolo) {
-    container.addActionRowComponents(
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId('torneo:inscribirse')
-          .setLabel('Inscribirme')
-          .setEmoji('📝')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId('torneo:retirarse')
-          .setLabel('Retirarme')
-          .setEmoji('🚪')
-          .setStyle(ButtonStyle.Danger)
+  if (tournament) {
+    container.addSeparatorComponents(separator())
+
+    if (isSolo) {
+      container.addActionRowComponents(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId('torneo:inscribirse')
+            .setLabel('Inscribirme')
+            .setEmoji('📝')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId('torneo:retirarse')
+            .setLabel('Retirarme')
+            .setEmoji('🚪')
+            .setStyle(ButtonStyle.Danger)
+        )
       )
-    )
-  } else {
-    container.addActionRowComponents(
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId('torneo:inscribirse')
-          .setLabel('Inscribirse')
-          .setEmoji('📝')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId('torneo:crear-equipo')
-          .setLabel('Crear Equipo')
-          .setEmoji('➕')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId('torneo:ver-equipo')
-          .setLabel('Ver Equipo')
-          .setEmoji('👀')
-          .setStyle(ButtonStyle.Secondary)
+    } else {
+      container.addActionRowComponents(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId('torneo:inscribirse')
+            .setLabel('Inscribirse')
+            .setEmoji('📝')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId('torneo:crear-equipo')
+            .setLabel('Crear equipo')
+            .setEmoji('➕')
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId('torneo:ver-equipo')
+            .setLabel('Ver equipo')
+            .setEmoji('👀')
+            .setStyle(ButtonStyle.Secondary)
+        )
       )
-    )
+    }
   }
 
   return {
@@ -224,13 +227,11 @@ export async function buildTeamView(
       memberLines.length ? memberLines.join('\n') : '-# El equipo no tiene integrantes.'
     ].join('\n'))
   )
-  container.addSeparatorComponents(separator())
-
   if (alerts.length) {
+    container.addSeparatorComponents(separator())
     container.addTextDisplayComponents(
       text(alerts.map(alert => `-# ${alert}`).join('\n'))
     )
-    container.addSeparatorComponents(separator())
   }
 
   if (isLeader) {
@@ -259,6 +260,7 @@ export async function buildTeamView(
         .setStyle(ButtonStyle.Danger)
     )
 
+    container.addSeparatorComponents(separator())
     container.addActionRowComponents(
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
@@ -282,6 +284,10 @@ export async function buildTeamView(
       new ActionRowBuilder<ButtonBuilder>().addComponents(...managementButtons)
     )
   } else {
+    container.addTextDisplayComponents(
+      text('-# Puedes salir del equipo cuando quieras.')
+    )
+    container.addSeparatorComponents(separator())
     container.addActionRowComponents(
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
@@ -290,9 +296,6 @@ export async function buildTeamView(
           .setEmoji('🚪')
           .setStyle(ButtonStyle.Danger)
       )
-    )
-    container.addTextDisplayComponents(
-      text('-# Solo el líder puede añadir, expulsar o cambiar roles.')
     )
   }
 
