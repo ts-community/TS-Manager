@@ -1,3 +1,4 @@
+import { recordContribution } from '../../../services/staffTracking'
 import {
   ActionRowBuilder,
   ChannelType,
@@ -255,6 +256,9 @@ export default {
         lastRenovationDate: lastMessageDate,
         nextRenovationDate: addDays(lastMessageDate, dias)
       })
+
+      await recordContribution(interaction.guild, staffEncargadoId || interaction.user.id, 'alliances', asociacion.id)
+        .catch(error => console.error('No se pudo registrar la alianza en el seguimiento:', error))
 
       await sendAsociacionesLog(
         interaction.client,

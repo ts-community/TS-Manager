@@ -1,3 +1,4 @@
+import { recordContribution } from './staffTracking'
 import {
   EmbedBuilder,
   type Client,
@@ -84,6 +85,9 @@ export async function registerBump(message: Message, service: BumpService, bumpe
     { lastBumperId: bumperId, channelId: message.channelId, bumpTime: new Date(bumpTime), notified: false, ...(pageUrl ? { pageUrl } : {}) },
     { upsert: true }
   )
+
+  if (message.guild) await recordContribution(message.guild, bumperId, 'bumps', message.id, message.createdTimestamp)
+    .catch(error => logger.error('Error en el seguimiento del bump', { error: String(error) }))
 
   if (!message.channel.isSendable()) return
 

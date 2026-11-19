@@ -1,3 +1,4 @@
+import { reconcileTrials } from '../../services/staffTracking'
 import mongoose from 'mongoose'
 import type { Event } from '#types/events'
 import { ActivityType, Client } from 'discord.js'
@@ -41,6 +42,7 @@ export default {
     }
 
     await mongoose.connect(mongoURL)
+    void reconcileTrials(client).catch(error => logger.error('No se pudieron sincronizar las pruebas', { error: String(error) }))
     logger.success('Database connected\n')
 
     // Sincroniza los paneles a los 15s de arrancar (con debounce para no re-renderizar por cada cambio)
