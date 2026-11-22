@@ -761,6 +761,8 @@ const SLOW_SYNC_DELAY_MS = 30 * 60 * 1000
 let fastTimer: NodeJS.Timeout | null = null
 let slowTimer: NodeJS.Timeout | null = null
 let syncPending = false
+// Si llega una petición de sync mientras hay otra en curso, se repite al terminar (si no, ese cambio se perdía)
+let syncRequestedAgain = false
 
 function runSync(client: Client): void {
   fastTimer = null
@@ -780,8 +782,12 @@ export function scheduleRenewalPanelSync(client: Client): void {
 }
 
 export async function syncPanels(client: Client): Promise<void> {
-  if (syncPending) return
+  if (syncPending) {
+    syncRequestedAgain = true
+    return
+  }
   syncPending = true
+  syncRequestedAgain = false
   try {
     invalidateStaffCache()
     const groups = await fetchStaffGroups(client)
@@ -798,6 +804,10 @@ export async function syncPanels(client: Client): Promise<void> {
     })
   } finally {
     syncPending = false
+  }
+  if (syncRequestedAgain) {
+    syncRequestedAgain = false
+    await syncPanels(client)
   }
 }
 
