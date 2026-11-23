@@ -34,11 +34,11 @@ import {
 const STAFF_MENU_ID = 'asoc-select-staff'
 const ASOCIACION_MENU_ID = 'asoc-select-asociacion'
 
-async function getLastMessageDate(channel: unknown): Promise<Date> {
+async function getLastMessageDate(channel: unknown): Promise<Date | null> {
   const manager = (channel as { messages?: { fetch: (o: { limit: number }) => Promise<Collection<string, Message>> } }).messages
   const last = await manager?.fetch({ limit: 1 }).catch(() => null)
   const firstMessage = last?.values().next().value
-  return firstMessage?.createdAt ?? new Date()
+  return firstMessage?.createdAt ?? null
 }
 
 // Tarjeta con las asociaciones de un staff + menú para entrar a cada una
@@ -246,14 +246,17 @@ export default {
         return reply(`Ya existe una asociación guardada con el nombre "${servidorDisplay}".`)
       }
 
-      const lastMessageDate = await getLastMessageDate(canal)
+      // Canal vacío: la renovación cuenta desde ahora, pero lastRenovationDate se deja
+      // fuera del cooldown de plantillas para que el primer mensaje reciba la plantilla
+      const lastMessage = await getLastMessageDate(canal)
+      const lastMessageDate = lastMessage ?? new Date()
       const asociacion = await Asociacion.create({
         servidor: servidorDisplay,
         representanteId: representante.id,
         renovacionDias: dias,
         canalId: canal.id,
         staffEncargadoId,
-        lastRenovationDate: lastMessageDate,
+        lastRenovationDate: lastMessage ?? new Date(Date.now() - 10 * 60 * 1000),
         nextRenovationDate: addDays(lastMessageDate, dias)
       })
 
