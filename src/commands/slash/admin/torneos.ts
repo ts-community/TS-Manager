@@ -302,6 +302,13 @@ export default {
             .setRequired(true)
             .addChoices(...MINUTE_CHOICES)
         )
+        .addIntegerOption(option =>
+          option
+            .setName('duracion_horas')
+            .setDescription('Duración del evento')
+            .setRequired(true)
+            .addChoices(...DURATION_CHOICES)
+        )
         .addStringOption(option =>
           option
             .setName('modalidad')
@@ -319,13 +326,6 @@ export default {
             .setName('max_jugadores')
             .setDescription('Número máximo de jugadores (solo modalidad individual)')
             .addChoices(...MAX_PLAYERS_CHOICES)
-        )
-        .addIntegerOption(option =>
-          option
-            .setName('duracion_horas')
-            .setDescription('Duración del evento')
-            .setRequired(true)
-            .addChoices(...DURATION_CHOICES)
         )
         .addBooleanOption(option =>
           option

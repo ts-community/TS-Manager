@@ -1,7 +1,7 @@
 /**
  * Script de migración: mueve los datos de la colección Verification a User.
  *
- * Uso: node --loader ts-node/esm scripts/migrate-verification-to-user.ts
+ * Uso: npx tsx scripts/migrate-verification-to-user.ts
  *
  * Este script:
  * 1. Lee todos los documentos de la colección "Verification".
@@ -12,10 +12,10 @@
  */
 
 import mongoose from 'mongoose'
-import { mongodbUri } from '../src/config/env'
+import { mongoURL } from '../src/config/env'
 
 async function main() {
-  await mongoose.connect(mongodbUri)
+  await mongoose.connect(mongoURL)
   console.log('Conectado a MongoDB')
 
   // Leer todos los documentos de Verification usando la colección cruda
@@ -57,11 +57,15 @@ async function main() {
     }
   }
 
-  // Borrar la colección Verification
-  await verificationCollection.drop().catch(() => {
-    // La colección podría no existir, ignorar error
-  })
-  console.log('Colección Verification eliminada')
+  // Borrar la colección Verification solo si no hubo errores
+  if (errors === 0) {
+    await verificationCollection.drop().catch(() => {
+      // La colección podría no existir, ignorar error
+    })
+    console.log('Colección Verification eliminada')
+  } else {
+    console.warn('Hubo errores: la colección Verification NO se ha borrado')
+  }
 
   console.log(`Migración completada: ${migrated} migrados, ${errors} errores`)
   await mongoose.disconnect()

@@ -49,16 +49,23 @@ function getMessageText(message: Message): string {
   return text
 }
 
-export function isBumpMessage(message: Message, service: BumpService): boolean {
-  const text = getMessageText(message).toLowerCase()
-  // Ignora "Already bumped. You can bump again <t:X:R>."
-  if (text.includes('already bumped')) return false
+// Auto-arreglo: no dependemos del texto exacto de Disboard/Discadia. Si el mensaje es la
+// respuesta al comando /bump y no parece un error/cooldown, se cuenta como bump aunque cambie el formato.
+const KNOWN_OK = /bump done|bump hecho|bump realizado|successfully bumped|server bumped|boost earned|\bbumped\./
+const FAIL = /already bumped|bump again|please wait|wait another|try again|cooldown|espera|vuelve a intentar|ya se ha|not allowed|no tienes|error|failed|fall[oó]|\d+\s*(minutes?|minutos?|mins?|hours?|horas?|seconds?|segundos?)/
 
-  if (text.includes('bump') && (text.includes('success') || text.includes('done') || text.includes('server bumped'))) {
-    return true
-  }
-  // Formato de Discadia: "**Servidor** bumped. +1 Boost earned. ... Next bump <t:X:R>"
-  return service === 'discadia' && (text.includes('boost earned') || /\bbumped\./.test(text))
+function isBumpCommand(message: Message): boolean {
+  const meta = message.interactionMetadata as { name?: string } | null
+  return (message.interaction?.commandName ?? meta?.name) === 'bump'
+}
+
+export function isBumpMessage(message: Message, service: BumpService): 'ok' | 'maybe' | null {
+  const text = getMessageText(message).toLowerCase()
+  if (!text.replace(/[\s"[\]{}]/g, '')) return null // vacío: llegará como edición
+  if (FAIL.test(text)) return null
+  if (KNOWN_OK.test(text)) return 'ok'
+  // Formato desconocido: se valida contra el cooldown en handlePossibleBump
+  return isBumpCommand(message) ? 'maybe' : null
 }
 
 export function getBumperId(message: Message): string | null {
@@ -69,6 +76,39 @@ export function getBumperId(message: Message): string | null {
     ?? (message.components.length > 0 ? JSON.stringify(message.components).match(MENTION_REGEX) : null)
 
   return match?.[1] ?? null
+}
+
+// Mensajes ya registrados: Disboard a veces publica el bump y luego lo edita,
+// así que el mismo mensaje puede llegar por messageCreate y por messageUpdate.
+const procesados = new Set<string>()
+function marcarProcesado(id: string): boolean {
+  if (procesados.has(id)) return false
+  procesados.add(id)
+  if (procesados.size > 200) procesados.delete(procesados.values().next().value!)
+  return true
+}
+
+/** Comprueba si un mensaje (nuevo o editado) es un bump y, si lo es, lo registra una sola vez. */
+export async function handlePossibleBump(message: Message): Promise<void> {
+  if (!message.guild) return
+  const service = getBumpService(message)
+  if (!service) return
+  const result = isBumpMessage(message, service)
+  if (!result) return
+  const bumperId = getBumperId(message)
+  if (!bumperId || !marcarProcesado(message.id)) return
+  if (result === 'maybe') {
+    const { label, cooldownMs } = BUMP_SERVICES[service]
+    const text = getMessageText(message).slice(0, 200)
+    // Un bump real es imposible antes de que acabe el cooldown: si llega antes, era un error
+    const prev = await Bump.findOne({ service })
+    if (prev && message.createdTimestamp - prev.bumpTime.getTime() < cooldownMs) {
+      logger.warn(`Bumps: formato de ${label} desconocido descartado (dentro del cooldown)`, { text })
+      return
+    }
+    logger.warn(`Bumps: formato de ${label} desconocido, aceptado como bump (respuesta a /bump)`, { text })
+  }
+  await registerBump(message, service, bumperId)
 }
 
 export async function registerBump(message: Message, service: BumpService, bumperId: string): Promise<void> {

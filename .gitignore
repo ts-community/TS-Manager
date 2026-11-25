@@ -34,3 +34,6 @@ Thumbs.db
 .env.*
 !.env.example
 package-lock.json
+
+# Copias de datos locales
+backups/
