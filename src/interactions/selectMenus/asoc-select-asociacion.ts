@@ -1,12 +1,12 @@
 import type { StringSelectMenuInteraction } from 'discord.js'
 import Asociacion, { type AsociacionDocument } from '../../models/Asociacion'
 import { buildAssociationDetailPayload } from '../../services/asociaciones'
-import { hasPermission } from '../../services/permissions'
+import { staffRank } from '../../services/permissions'
 
 // Submenu "detallar una asociación" — CustomId: asoc-select-asociacion (StringSelect)
 export default {
   async execute(interaction: StringSelectMenuInteraction): Promise<void> {
-    if (!await hasPermission(interaction, 'staff')) {
+    if (!(await staffRank(interaction)).staff) {
       await interaction.reply({ content: 'Solo el staff puede consultar las asociaciones.' })
       return
     }
@@ -18,6 +18,7 @@ export default {
       return
     }
 
-    await interaction.update(buildAssociationDetailPayload(asociacion, { canEdit: true, canDelete: true }))
+    const manage=(await staffRank(interaction)).instructor
+    await interaction.update(buildAssociationDetailPayload(asociacion, { canEdit: manage, canDelete: manage }))
   }
 }

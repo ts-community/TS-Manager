@@ -1,3 +1,5 @@
+import { startAssociationHttp } from '../../services/associationHttp'
+import { checkDueSurveys, syncSurveys, invalidateSurveyHistory } from '../../services/surveyDelivery'
 import type { Event } from '#types/events'
 
 import { runInterval } from '../../utils/interval'
@@ -26,9 +28,12 @@ export default {
   once: true,
 
   async execute(client: import('discord.js').Client) {
+    startAssociationHttp(client)
+    client.on('shardResume',invalidateSurveyHistory)
     runInterval([scanNextTagMember], 800)
 
     runInterval([
+      syncSurveys.bind(null, client),
       runChannelPurges.bind(null, client),
       checkBumpReminders.bind(null, client)
     ], MINUTE)
@@ -40,7 +45,8 @@ export default {
 
     runInterval([
       expireBlacklist.bind(null, client),
-      checkDueAsociaciones.bind(null, client)
+      checkDueAsociaciones.bind(null, client),
+      checkDueSurveys.bind(null, client)
     ], HOUR)
 
     runInterval([

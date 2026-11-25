@@ -1,3 +1,4 @@
+import { staffChannels } from '../config/staffChannels'
 import { PermissionFlagsBits, GuildMember } from 'discord.js'
 import type { GuildMember as GuildMemberType, ChatInputCommandInteraction } from 'discord.js'
 import type { CommandPermission } from '../types/commands'
@@ -65,4 +66,13 @@ export function checkCooldown(commandName: string, userId: string, cooldown: num
   setTimeout(() => timestamps.delete(userId), cooldown * 1000)
 
   return null
+}
+/** El rango efectivo de TS siempre deriva de un rol de staff registrado. */
+export async function staffRank(context: { guild: GuildMemberType['guild'] | null; user: { id: string } }) {
+  const guild = context.guild
+  if (guild?.id !== staffChannels.guild) return { staff: false, instructor: false }
+  const [member, roles, config] = await Promise.all([guild.members.fetch({ user: context.user.id, force: true }), guild.roles.fetch(), getGuildConfig()])
+  const floor = roles.get(process.env.PANEL_MIN_ROLE_ID || '1202685031219200040')
+  const assigned = member.roles.cache.filter(role => config.staffRoleIds.includes(role.id))
+  return { staff: !member.user.bot && assigned.size > 0, instructor: !member.user.bot && !!floor && assigned.some(role => role.comparePositionTo(floor) >= 0) }
 }

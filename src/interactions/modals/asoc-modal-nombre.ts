@@ -1,12 +1,13 @@
+import { persistAssociation } from '../../services/associationOperations'
 import type { ModalSubmitInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
 import { capitalizeName, schedulePanelsSync, buildEditorPayload } from '../../services/asociaciones'
-import { hasPermission } from '../../services/permissions'
+import { staffRank } from '../../services/permissions'
 
 // CustomId: asoc-modal-nombre:{asociacionId}
 export default {
   async execute(interaction: ModalSubmitInteraction): Promise<void> {
-    if (!await hasPermission(interaction, 'staff')) {
+    if (!(await staffRank(interaction)).instructor) {
       return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.' })
     }
 
@@ -25,8 +26,8 @@ export default {
     }
 
     asociacion.servidor = nuevoNombre
-    await asociacion.save()
-    schedulePanelsSync(interaction.client)
+    await persistAssociation(asociacion,interaction.guild!,interaction.user.id,interaction.id)
+
     if (interaction.isFromMessage()) return void interaction.update(buildEditorPayload(asociacion, { canDelete: true }))
     await interaction.reply({ content: `Nombre actualizado a **${nuevoNombre}**.` })
   }

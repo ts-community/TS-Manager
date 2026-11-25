@@ -1,12 +1,12 @@
 import { type StringSelectMenuInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
 import { buildRemoveConfirmPayload } from '../../services/asociaciones'
-import { hasPermission } from '../../services/permissions'
+import { staffRank } from '../../services/permissions'
 
 // Confirmación de eliminación (solo staff) — CustomId: asoc-select-eliminar
 export default {
   async execute(interaction: StringSelectMenuInteraction): Promise<void> {
-    if (!await hasPermission(interaction, 'staff')) {
+    if (!(await staffRank(interaction)).instructor) {
       return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.' })
     }
 

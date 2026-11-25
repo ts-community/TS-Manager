@@ -1,3 +1,5 @@
+import {observeDue} from './staffSignals'
+import { staffChannels } from '../config/staffChannels'
 import {
   EmbedBuilder,
   ActionRowBuilder,
@@ -26,10 +28,10 @@ export { logger }
 export type Container = InstanceType<typeof ContainerBuilder>
 
 // Canal donde se registran logs, avisos de renovación y salidas de representantes
-export const ASOCIACIONES_LOG_CHANNEL_ID = '1557813125581906001'
+export const ASOCIACIONES_LOG_CHANNEL_ID = staffChannels.associationLog
 
 // Categoría donde se crean los canales de asociación
-export const ASOCIACIONES_CATEGORY_ID = '1544707760287912107'
+export const ASOCIACIONES_CATEGORY_ID = staffChannels.associationCategory
 
 // Rol que silencia el ping del aviso de renovación automática
 export const ASOCIACIONES_PING_ROLE_ID = '1219196487011930194'
@@ -211,6 +213,7 @@ export async function checkDueAsociaciones(client: Client): Promise<void> {
     renovacionAvisada: false
   })
   if (!due.length) return
+  for(const row of due)await observeDue(String(row._id),row.nextRenovationDate)
 
   const channel = await client.channels.fetch(ASOCIACIONES_LOG_CHANNEL_ID).catch(() => null)
   if (!channel?.isSendable()) {
@@ -469,7 +472,7 @@ export function buildAssociationsListPayload(
 // ===== Panel types & functions (fusionados de asociacionesPanel.ts) =====
 
 // Canal/hilo donde vive el panel "en vivo" del estado de asociaciones
-export const ASOCIACIONES_LIVE_THREAD_ID = '1562220631783903382'
+export const ASOCIACIONES_LIVE_THREAD_ID = staffChannels.associationBoard
 // Canal anfitrión del hilo en vivo (no se trata como asociación)
 export const ASOCIACIONES_THREAD_CHANNEL_ID = '1436773704980758548'
 // Icono decorativo de canales de staff en desuso (se eliminan automáticamente en cada sync)

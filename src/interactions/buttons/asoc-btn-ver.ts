@@ -1,7 +1,7 @@
 import type { ButtonInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
 import { buildAssociationDetailPayload } from '../../services/asociaciones'
-import { hasPermission } from '../../services/permissions'
+import { staffRank } from '../../services/permissions'
 
 // CustomId: asoc-btn-ver:{asociacionId} — vuelve a la tarjeta de detalle
 export default {
@@ -9,7 +9,7 @@ export default {
     const asociacion = await Asociacion.findById(interaction.customId.split(':')[1])
     if (!asociacion) return void interaction.reply({ content: 'Esta asociación ya no existe.' })
 
-    const canDelete = await hasPermission(interaction, 'staff')
+    const canDelete = (await staffRank(interaction)).instructor
     await interaction.update(buildAssociationDetailPayload(asociacion, { canEdit: canDelete, canDelete }))
   }
 }

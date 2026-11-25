@@ -9,7 +9,7 @@ const srcDir = path.join(scriptDir, '..', 'src')
 const distDir = path.join(scriptDir, '..', 'dist')
 
 // Carpetas de src que contienen assets a replicar en dist, misma ruta relativa
-const assetDirs = ['src/ml/model']
+const assetDirs = ['src/ml/model', 'src/assets/surveys']
 
 for (const rel of assetDirs) {
   const from = path.join(scriptDir, '..', rel)

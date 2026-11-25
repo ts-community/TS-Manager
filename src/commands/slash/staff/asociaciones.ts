@@ -1,3 +1,5 @@
+import { staffRank } from '../../../services/permissions'
+import { persistAssociation } from '../../../services/associationOperations'
 import { recordContribution } from '../../../services/staffTracking'
 import {
   ActionRowBuilder,
@@ -44,7 +46,8 @@ async function getLastMessageDate(channel: unknown): Promise<Date | null> {
 // Tarjeta con las asociaciones de un staff + menú para entrar a cada una
 async function buildAsociacionesStaffPayload(
   interaction: ChatInputCommandInteraction,
-  memberId: string
+  memberId: string,
+  manage: boolean
 ): Promise<unknown> {
   const member = await interaction.guild!.members.fetch(memberId).catch(() => null)
   const asociaciones = await Asociacion.find({ staffEncargadoId: memberId }).sort({ servidor: 1 })
@@ -57,7 +60,7 @@ async function buildAsociacionesStaffPayload(
   }
 
   if (asociaciones.length === 1) {
-    return buildAssociationDetailPayload(asociaciones[0], { canEdit: true, canDelete: true })
+    return buildAssociationDetailPayload(asociaciones[0], { canEdit: manage, canDelete: manage })
   }
 
   const menu = new StringSelectMenuBuilder()
@@ -142,6 +145,8 @@ export default {
     ),
 
   async autocomplete(interaction) {
+    const rank=await staffRank(interaction)
+    if(!rank.staff || interaction.options.getSubcommand()!=='mostrar' && !rank.instructor) return interaction.respond([])
     const focused = interaction.options.getFocused(true)
     const search = String(focused.value).toLowerCase()
     const asociaciones = await Asociacion.find().sort({ servidor: 1 })
@@ -167,7 +172,9 @@ export default {
 
     const sub = interaction.options.getSubcommand()
 
-    await interaction.deferReply()
+    const rank=await staffRank(interaction), manage=rank.instructor
+    if(!rank.staff || sub!=='mostrar' && !manage) return interaction.reply({content:'Permiso insuficiente en TS.',ephemeral:true})
+    await interaction.deferReply({ephemeral:true})
 
     const reply = async (content: string) => {
       await interaction.editReply({ content })
@@ -185,12 +192,12 @@ export default {
         }
 
         return interaction.editReply(
-          buildAssociationDetailPayload(asociacion, { canEdit: true, canDelete: true }) as never
+          buildAssociationDetailPayload(asociacion, { canEdit: manage, canDelete: manage }) as never
         )
       }
 
       if (staffUser) {
-        return interaction.editReply(await buildAsociacionesStaffPayload(interaction, staffUser.id) as never)
+        return interaction.editReply(await buildAsociacionesStaffPayload(interaction, staffUser.id,manage) as never)
       }
 
       // Sin parámetros: menú para elegir el staff/miembro
@@ -260,7 +267,7 @@ export default {
         nextRenovationDate: addDays(lastMessageDate, dias)
       })
 
-      await recordContribution(interaction.guild, staffEncargadoId || interaction.user.id, 'alliances', asociacion.id)
+      await recordContribution(interaction.guild, interaction.user.id, 'associations', asociacion.id, Date.now(), { responsibleId:staffEncargadoId,representativeId:asociacion.representanteId,associationId:asociacion.id,channelId:asociacion.canalId,interactionId:interaction.id })
         .catch(error => console.error('No se pudo registrar la alianza en el seguimiento:', error))
 
       await sendAsociacionesLog(
@@ -344,8 +351,7 @@ export default {
         return reply('No hay nada que cambiar: todos los campos indicados ya tenían esos valores.')
       }
 
-      await asociacion.save()
-      schedulePanelsSync(interaction.client)
+      await persistAssociation(asociacion,interaction.guild,interaction.user.id,interaction.id)
 
       await sendAsociacionesLog(
         interaction.client,

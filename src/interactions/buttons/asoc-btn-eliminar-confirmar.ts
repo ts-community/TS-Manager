@@ -1,12 +1,12 @@
 import type { ButtonInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
 import { buildNoticePayload, capitalizeName, schedulePanelsSync } from '../../services/asociaciones'
-import { hasPermission } from '../../services/permissions'
+import { staffRank } from '../../services/permissions'
 
 // CustomId: asoc-btn-eliminar-confirmar:{asociacionId} — elimina (solo staff)
 export default {
   async execute(interaction: ButtonInteraction): Promise<void> {
-    if (!await hasPermission(interaction, 'staff')) {
+    if (!(await staffRank(interaction)).instructor) {
       return void interaction.reply({ content: 'Solo el staff puede eliminar asociaciones.' })
     }
 

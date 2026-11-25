@@ -18,7 +18,7 @@ import {
 import mongoose from 'mongoose'
 import { internalApiKey, tsApiUrl } from '../config/env'
 import logger from '../utils/logger'
-import { hasPermission } from './permissions'
+import { staffRank } from './permissions'
 
 export type PostulacionDecision = 'accept' | 'decline'
 export type PostulacionArchiveAction = 'archive' | 'unarchive'
@@ -171,9 +171,9 @@ export async function showPostulacionModal(
   const guild = interaction.guild
   if (!guild) return
 
-  if (!await hasPermission(interaction, 'staff')) {
+  if (!(await staffRank(interaction)).instructor) {
     await interaction.reply({
-      content: 'Solo el staff puede gestionar postulaciones.',
+      content: 'Solo Instructor o superior puede gestionar postulaciones.',
       ephemeral: true
     })
     return
@@ -226,7 +226,8 @@ async function syncApplicationStatus(
   discordMessageId: string | null,
   status: ApplicationStatus,
   expectedStatus: ApplicationStatus,
-  reviewedBy: string
+  reviewedBy: string,
+  actorId: string
 ): Promise<boolean> {
   if (applicationId && internalApiKey) {
     try {
@@ -236,7 +237,8 @@ async function syncApplicationStatus(
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            'x-internal-key': internalApiKey
+            'x-internal-key': internalApiKey,
+            'x-discord-id': actorId
           },
           body: JSON.stringify({
             status,
@@ -313,9 +315,9 @@ export async function handlePostulacionArchive(
   interaction: ButtonInteraction,
   action: PostulacionArchiveAction
 ): Promise<void> {
-  if (!await hasPermission(interaction, 'staff')) {
+  if (!(await staffRank(interaction)).instructor) {
     await interaction.reply({
-      content: 'Solo el staff puede archivar o desarchivar postulaciones.',
+      content: 'Solo Instructor o superior puede archivar o desarchivar postulaciones.',
       ephemeral: true
     })
     return
@@ -344,7 +346,8 @@ export async function handlePostulacionArchive(
     interaction.message.id,
     nextStatus,
     expectedStatus,
-    nextStatus === 'archived' ? interaction.user.tag : ''
+    nextStatus === 'archived' ? interaction.user.tag : '',
+    interaction.user.id
   )
 
   if (!synced) {
@@ -425,6 +428,10 @@ export async function handlePostulacionArchive(
 export async function handlePostulacionSubmit(
   interaction: ModalSubmitInteraction
 ): Promise<void> {
+  if (!(await staffRank(interaction)).instructor) {
+    await interaction.reply({ content: 'Se requiere Instructor o superior.', ephemeral: true })
+    return
+  }
   const [, decisionRaw, third, fourth] = interaction.customId.split(':')
 
   const applicationId =
@@ -478,7 +485,8 @@ export async function handlePostulacionSubmit(
       interaction.message?.id ?? null,
       nextStatus,
       'pending',
-      authorName
+      authorName,
+      interaction.user.id
     )
 
     if (!synced) {

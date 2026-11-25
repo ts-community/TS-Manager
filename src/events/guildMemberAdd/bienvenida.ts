@@ -1,9 +1,11 @@
+import { joinObserved } from '../../services/staffSignals'
+import { staffChannels } from '../../config/staffChannels'
 import { EmbedBuilder, type Client, type GuildMember } from 'discord.js'
 import type { Event } from '../../types/events'
 import logger from '../../utils/logger'
 
 // Canal donde se publica la bienvenida
-const WELCOME_CHANNEL_ID = '1096150563667837011'
+const WELCOME_CHANNEL_ID = staffChannels.general
 
 // Enlace del título del embed
 const WELCOME_URL = 'https://niveles.tscomunity.es/easteregg?guild=1093864130030612521'
@@ -13,6 +15,7 @@ export default {
   async execute(member: GuildMember, client: Client): Promise<void> {
     if (member.user.bot) return
 
+    await joinObserved(member)
     try {
       const channel = await client.channels.fetch(WELCOME_CHANNEL_ID).catch(() => null)
       if (!channel?.isSendable()) return
@@ -31,11 +34,12 @@ export default {
           iconURL: guild.iconURL() ?? undefined
         })
 
-      await channel.send({
+      const sent=await channel.send({
         content: `<@${member.id}>`,
         embeds: [embed],
         allowedMentions: { users: [member.id] }
       })
+      await joinObserved(member,sent.id)
     } catch (error) {
       logger.error('Bienvenida: error enviando el mensaje', {
         message: error instanceof Error ? error.message : 'Unknown error'

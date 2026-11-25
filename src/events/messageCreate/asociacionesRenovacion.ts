@@ -1,3 +1,4 @@
+import { renewal } from '../../services/staffSignals'
 import type { Client, Message } from 'discord.js'
 import type { Event } from '../../types/events'
 import Asociacion from '../../models/Asociacion'
@@ -24,7 +25,9 @@ export default {
       const asociacion = await Asociacion.findOne({ canalId: message.channelId })
       if (!asociacion) return
 
-      const now = new Date()
+      await renewal(message,{id:String(asociacion._id),nextRenovationDate:asociacion.nextRenovationDate,staffEncargadoId:asociacion.staffEncargadoId}).catch(() => logger.warn('Renovación pendiente de revisión', {sourceId:message.id}))
+      const now = message.createdAt
+      if(asociacion.lastRenovationDate && +now<=+asociacion.lastRenovationDate)return
       const nextRenovationDate = addDays(now, asociacion.renovacionDias)
       const update = { lastRenovationDate: now, nextRenovationDate, renovacionAvisada: false }
 
@@ -41,7 +44,7 @@ export default {
       )
 
       if (!claimed) {
-        await Asociacion.updateOne({ _id: asociacion._id }, update)
+        await Asociacion.updateOne({ _id: asociacion._id, lastRenovationDate:{$lt:now} }, update)
         return
       }
       asociacion.nextRenovationDate = claimed.nextRenovationDate

@@ -10,14 +10,14 @@ import {
   buildMessageCard,
   capitalizeName
 } from '../../services/asociaciones'
-import { hasPermission } from '../../services/permissions'
+import { staffRank } from '../../services/permissions'
 
 // Menú "por staff": CustomId: asoc-select-staff (UserSelect); eligible staff → sus asociaciones
 export default {
   async execute(interaction: UserSelectMenuInteraction): Promise<void> {
     if (interaction.customId !== 'asoc-select-staff') return
 
-    if (!await hasPermission(interaction, 'staff')) {
+    if (!(await staffRank(interaction)).staff) {
       await interaction.reply({ content: 'Solo el staff puede consultar las asociaciones.' })
       return
     }
@@ -34,7 +34,8 @@ export default {
     }
 
     if (asociaciones.length === 1) {
-      await interaction.update(buildAssociationDetailPayload(asociaciones[0], { canEdit: true, canDelete: true }))
+      const manage=(await staffRank(interaction)).instructor
+    await interaction.update(buildAssociationDetailPayload(asociaciones[0], { canEdit: manage, canDelete: manage }))
       return
     }
 

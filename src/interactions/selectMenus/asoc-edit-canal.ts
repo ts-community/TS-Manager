@@ -1,13 +1,14 @@
+import { persistAssociation } from '../../services/associationOperations'
 import { ChannelType, TextChannel, type ChannelSelectMenuInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
 import { addDays } from '../../services/asociaciones'
 import { schedulePanelsSync, buildEditorPayload } from '../../services/asociaciones'
-import { hasPermission } from '../../services/permissions'
+import { staffRank } from '../../services/permissions'
 
 // Cambiar canal de la asociación — CustomId: asoc-edit-canal:{asociacionId}
 export default {
   async execute(interaction: ChannelSelectMenuInteraction): Promise<void> {
-    if (!await hasPermission(interaction, 'staff')) {
+    if (!(await staffRank(interaction)).instructor) {
       return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.' })
     }
 
@@ -24,8 +25,7 @@ export default {
     asociacion.lastRenovationDate = last
     asociacion.nextRenovationDate = addDays(last, asociacion.renovacionDias)
     asociacion.renovacionAvisada = false
-    await asociacion.save()
-    schedulePanelsSync(interaction.client)
+    await persistAssociation(asociacion,interaction.guild!,interaction.user.id,interaction.id)
 
     await interaction.update(buildEditorPayload(asociacion, { canDelete: true }))
   }

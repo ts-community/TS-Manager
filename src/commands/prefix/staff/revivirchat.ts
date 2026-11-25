@@ -1,8 +1,9 @@
+import { staffChannels } from '../../../config/staffChannels'
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js'
 import type { PrefixCommand } from '../../../types/commands'
 
 const ROLE_ID = '1173666295556866089'
-const GENERAL_CHANNEL_ID = '1096150563667837011'
+const GENERAL_CHANNEL_ID = staffChannels.general
 const COOLDOWN_MS = 24 * 60 * 60 * 1000
 
 /** Última vez que se envió el ping del rol en este proceso. */

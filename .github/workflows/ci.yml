@@ -37,3 +37,7 @@ jobs:
         run: pnpm typecheck
       - name: Build
         run: pnpm build
+      - name: Renderizar el cartel de encuestas en Linux
+        run: node --import tsx --test --test-name-pattern="cartel con siete días" tests/survey-delivery.test.ts
+      - name: Verificar los destinos de staff con el adaptador local
+        run: node scripts/check-staff.mjs --fixture

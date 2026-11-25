@@ -1,13 +1,14 @@
+import { persistAssociation } from '../../services/associationOperations'
 import type { ModalSubmitInteraction } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
 import { addDays } from '../../services/asociaciones'
 import { schedulePanelsSync, buildEditorPayload } from '../../services/asociaciones'
-import { hasPermission } from '../../services/permissions'
+import { staffRank } from '../../services/permissions'
 
 // CustomId: asoc-modal-renovacion:{asociacionId}
 export default {
   async execute(interaction: ModalSubmitInteraction): Promise<void> {
-    if (!await hasPermission(interaction, 'staff')) {
+    if (!(await staffRank(interaction)).instructor) {
       return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.' })
     }
 
@@ -22,8 +23,8 @@ export default {
     asociacion.renovacionDias = dias
     asociacion.nextRenovationDate = addDays(new Date(asociacion.lastRenovationDate as Date), dias)
     asociacion.renovacionAvisada = false
-    await asociacion.save()
-    schedulePanelsSync(interaction.client)
+    await persistAssociation(asociacion,interaction.guild!,interaction.user.id,interaction.id)
+
     if (interaction.isFromMessage()) return void interaction.update(buildEditorPayload(asociacion, { canDelete: true }))
     await interaction.reply({ content: `Frecuencia actualizada a **cada ${dias} días**.` })
   }

@@ -1,3 +1,4 @@
+import { persistAssociation } from '../../services/associationOperations'
 import {
   ActionRowBuilder,
   ChannelSelectMenuBuilder,
@@ -10,7 +11,7 @@ import {
 } from 'discord.js'
 import Asociacion from '../../models/Asociacion'
 import { EMOJI, schedulePanelsSync, buildEditorPayload, buildMessageCard, capitalizeName } from '../../services/asociaciones'
-import { hasPermission } from '../../services/permissions'
+import { staffRank } from '../../services/permissions'
 
 // Editor de campos de una asociación (solo staff). CustomId: asoc-edit-campo:{asociacionId}
 export default {
@@ -20,7 +21,7 @@ export default {
     const asociacion = await Asociacion.findById(asociacionId)
     if (!asociacion) return void interaction.reply({ content: 'Esta asociación ya no existe.' })
 
-    if (!await hasPermission(interaction, 'staff')) {
+    if (!(await staffRank(interaction)).instructor) {
       return void interaction.reply({ content: 'Solo el staff puede editar asociaciones.' })
     }
 
@@ -83,13 +84,13 @@ export default {
       }
       case 'quitar-representante':
         asociacion.representanteId = null
-        await asociacion.save()
-        schedulePanelsSync(interaction.client)
+        await persistAssociation(asociacion,interaction.guild!,interaction.user.id,interaction.id)
+
         return void interaction.update(buildEditorPayload(asociacion, { canDelete: true }))
       case 'quitar-staff-encargado':
         asociacion.staffEncargadoId = null
-        await asociacion.save()
-        schedulePanelsSync(interaction.client)
+        await persistAssociation(asociacion,interaction.guild!,interaction.user.id,interaction.id)
+
         return void interaction.update(buildEditorPayload(asociacion, { canDelete: true }))
     }
   }

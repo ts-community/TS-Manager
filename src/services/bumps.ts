@@ -1,3 +1,5 @@
+import { verifiedBump } from './bumpCredit'
+import { staffChannels } from '../config/staffChannels'
 import { recordContribution } from './staffTracking'
 import {
   EmbedBuilder,
@@ -51,8 +53,8 @@ function getMessageText(message: Message): string {
 
 // Auto-arreglo: no dependemos del texto exacto de Disboard/Discadia. Si el mensaje es la
 // respuesta al comando /bump y no parece un error/cooldown, se cuenta como bump aunque cambie el formato.
-const KNOWN_OK = /bump done|bump hecho|bump realizado|successfully bumped|server bumped|boost earned|\bbumped\./
-const FAIL = /already bumped|bump again|please wait|wait another|try again|cooldown|espera|vuelve a intentar|ya se ha|not allowed|no tienes|error|failed|fall[oó]|\d+\s*(minutes?|minutos?|mins?|hours?|horas?|seconds?|segundos?)/
+const KNOWN_OK = /bump done|bump (?:was )?successful|bump hecho|bump realizado|successfully bumped|server bumped|boost earned|\bbumped\./
+const FAIL = /already bumped|bump again|too (?:soon|early)|todavía no|please wait|wait another|try again|cooldown|espera|vuelve a intentar|ya se ha|not allowed|no tienes|error|failed|fall[oó]|\d+\s*(minutes?|minutos?|mins?|hours?|horas?|seconds?|segundos?)/
 
 function isBumpCommand(message: Message): boolean {
   const meta = message.interactionMetadata as { name?: string } | null
@@ -96,7 +98,11 @@ export async function handlePossibleBump(message: Message): Promise<void> {
   const result = isBumpMessage(message, service)
   if (!result) return
   const bumperId = getBumperId(message)
-  if (!bumperId || !marcarProcesado(message.id)) return
+  if (!bumperId) return
+  if (procesados.has(message.id)) {
+    if (result === 'ok') await creditConfirmedBump(message, service, bumperId)
+    return
+  }
   if (result === 'maybe') {
     const { label, cooldownMs } = BUMP_SERVICES[service]
     const text = getMessageText(message).slice(0, 200)
@@ -108,10 +114,22 @@ export async function handlePossibleBump(message: Message): Promise<void> {
     }
     logger.warn(`Bumps: formato de ${label} desconocido, aceptado como bump (respuesta a /bump)`, { text })
   }
-  await registerBump(message, service, bumperId)
+  if (marcarProcesado(message.id)) {
+    await registerBump(message, service, bumperId, result === 'ok')
+  } else if (result === 'ok') {
+    await creditConfirmedBump(message, service, bumperId)
+  }
 }
 
-export async function registerBump(message: Message, service: BumpService, bumperId: string): Promise<void> {
+async function creditConfirmedBump(message: Message, service: BumpService, bumperId: string, thanksId?: string) {
+  if (!message.guild || !await verifiedBump(message, service)) return
+  await recordContribution(message.guild, bumperId, 'bumps', message.id, message.createdTimestamp, {
+    provider: service, providerId: message.author.id, channelId: message.channelId, rule: 'provider-success',
+    ...(thanksId ? { thanksId } : {})
+  })
+}
+
+export async function registerBump(message: Message, service: BumpService, bumperId: string, confirmed = isBumpMessage(message, service) === 'ok'): Promise<void> {
   const { cooldownMs } = BUMP_SERVICES[service]
 
   // Si el bot indica el próximo bump (<t:X:R>), el aviso sale justo a esa hora
@@ -126,17 +144,26 @@ export async function registerBump(message: Message, service: BumpService, bumpe
     { upsert: true }
   )
 
-  if (message.guild) await recordContribution(message.guild, bumperId, 'bumps', message.id, message.createdTimestamp)
-    .catch(error => logger.error('Error en el seguimiento del bump', { error: String(error) }))
+  let retryCredit = false
+  if (confirmed) {
+    try {
+      await creditConfirmedBump(message, service, bumperId)
+    } catch {
+      retryCredit = true
+      logger.warn('Crédito de bump pendiente de conciliación', { sourceId: message.id })
+    }
+  }
 
   if (!message.channel.isSendable()) return
 
   const nextBumpUnix = Math.floor((bumpTime + cooldownMs) / 1000)
 
-  await message.channel.send({
+  const thanks=await message.channel.send({
+    ...(message.guildId===staffChannels.guild ? {nonce:message.id,enforceNonce:true,reply:{messageReference:message.id,failIfNotExists:false}} : {}),
     content: `¡Gracias por bumpear el servidor, <@${bumperId}>, se te recordara de nuevo <t:${nextBumpUnix}:R>!`,
-    allowedMentions: { users: [bumperId] }
+    allowedMentions: { users: [bumperId], repliedUser:false }
   })
+  if (retryCredit) await creditConfirmedBump(message, service, bumperId, thanks.id)
 }
 
 export async function checkBumpReminders(client: Client): Promise<void> {

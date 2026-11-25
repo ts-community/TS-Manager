@@ -1,3 +1,4 @@
+import { staffRank } from '../../services/permissions'
 import { EmbedBuilder } from 'discord.js'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -48,6 +49,11 @@ export default {
         id = interaction.customId
       }
 
+      if (id.startsWith('asoc-') && interaction.isRepliable()) {
+        const rank=await staffRank(interaction)
+        const read=['asoc-btn-ver','asoc-select-staff','asoc-select-asociacion'].includes(id.split(':')[0])
+        if(!rank.staff || !read && !rank.instructor) {await interaction.reply({content:'Permiso insuficiente en TS.',ephemeral:true});return}
+      }
       if (folder) {
         handler = await loadHandler(folder, id)
       }

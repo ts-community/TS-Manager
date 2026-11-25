@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 
 export interface AsociacionConfig {
+  ultimaOperacion?: string
   servidor: string
   representanteId: string | null
   renovacionDias: number
@@ -13,6 +14,7 @@ export interface AsociacionConfig {
 }
 
 const asociacionSchema = new mongoose.Schema<AsociacionConfig>({
+  ultimaOperacion: String,
   // Nombre para mostrar, con las mayúsculas correctas (ej: "El Sótano Oficial")
   servidor: { type: String, required: true, unique: true },
   representanteId: { type: String, required: false, default: null },
@@ -23,7 +25,7 @@ const asociacionSchema = new mongoose.Schema<AsociacionConfig>({
   renovacionAvisada: { type: Boolean, default: false },
   staffEncargadoId: { type: String, required: false, default: null },
   createdAt: { type: Date, default: Date.now }
-})
+}, { optimisticConcurrency:true })
 
 export type AsociacionDocument = mongoose.HydratedDocument<AsociacionConfig>
 
