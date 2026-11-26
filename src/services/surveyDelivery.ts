@@ -67,7 +67,8 @@ async function poster(guild:Guild,w:Week) {
     const old=await existing(target,record,marker)
     let png:Buffer|undefined
     try{png=await renderBoard(w)}catch{}
-    const content='**'+marker+'**\n'+w.items.map(s=>describe(w,s).slice(0,230)).join('\n')
+    // Solo la imagen; el texto queda como respaldo si no se pudo generar.
+    const content=png?'':'**'+marker+'**\n'+w.items.map(s=>describe(w,s).slice(0,230)).join('\n')
     const files=png?[new AttachmentBuilder(png,{name:'agenda.png',description:'Reparto de lunes a domingo. Ver semana muestra los nombres completos y el estado de cada día.'})]:[]
     const body={content,components:[row],allowedMentions:{parse:[] as never[]},files}
     const message=old?await old.edit({...body,attachments:[]}):await target.send({...body,nonce:token(key),enforceNonce:true})
