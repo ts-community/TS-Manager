@@ -3,6 +3,8 @@ import { checkDueSurveys, syncSurveys, invalidateSurveyHistory } from '../../ser
 import type { Event } from '#types/events'
 
 import { runInterval } from '../../utils/interval'
+import mongoose from 'mongoose'
+import { once } from 'node:events'
 
 import { expireBlacklist } from '../../services/blacklist'
 import {
@@ -28,6 +30,9 @@ export default {
   once: true,
 
   async execute(client: import('discord.js').Client) {
+    // initialize.ts conecta Mongo en este mismo clientReady: sin esperar, la
+    // primera pasada de encuestas fallaba y la horaria no volvía hasta 1 h después.
+    if (mongoose.connection.readyState !== 1) await once(mongoose.connection, 'connected')
     startAssociationHttp(client)
     client.on('shardResume',invalidateSurveyHistory)
     runInterval([scanNextTagMember], 800)
